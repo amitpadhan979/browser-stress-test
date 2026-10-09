@@ -1,6 +1,6 @@
 /**
  * CPU Stress Test Manager
- * Manages the worker thread pool, aggregates calculation metrics, and throttles load.
+ * Coordinates multi-threaded worker pool with smooth main-thread IPC aggregation.
  */
 
 export class CPUManager {
@@ -49,7 +49,7 @@ export class CPUManager {
         };
 
         worker.onerror = (err) => {
-          console.error(`Worker ${workerId} error:`, err);
+          console.error(`CPU Worker ${workerId} error:`, err);
         };
 
         worker.postMessage({
@@ -89,8 +89,10 @@ export class CPUManager {
   stop() {
     this.isRunning = false;
     this.workers.forEach(w => {
-      w.postMessage({ type: 'STOP' });
-      w.terminate();
+      try {
+        w.postMessage({ type: 'STOP' });
+        w.terminate();
+      } catch (e) {}
     });
     this.workers = [];
     this.currentOpsPerSec = 0;

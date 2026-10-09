@@ -3,23 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0a0c10">
-  <meta name="description" content="Cross-platform browser-based CPU and GPU stress test and benchmark for all devices.">
-  <title>Browser Stress Test | CPU & GPU Thermal & Performance Benchmark</title>
+  <meta name="theme-color" content="#07090e">
+  <meta name="description" content="Universal high-performance cross-platform CPU & GPU stress test and stability benchmark for all devices.">
+  <title>Browser Stress Test | CPU & GPU Thermal & Stability Benchmark</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
-  <!-- Header -->
+  <!-- App Header -->
   <header class="app-header">
     <div class="brand">
-      <span class="brand-icon">⚡</span>
+      <div class="brand-badge">⚡</div>
       <div>
-        <h1>BROWSER STRESS TEST</h1>
-        <div class="tagline">Universal CPU & GPU Thermal / Stability Benchmark</div>
+        <div class="brand-title">
+          <h1>BROWSER STRESS TEST</h1>
+          <span class="version-tag">v2.0 PRO</span>
+        </div>
+        <div class="tagline">Cross-Platform CPU & GPU Stability, Thermal & Performance Suite</div>
       </div>
     </div>
     <div class="header-status">
@@ -30,7 +33,7 @@
   <!-- Main Container -->
   <main class="main-container">
 
-    <!-- Device Specs Telemetry Bar -->
+    <!-- Live Hardware Telemetry Strip -->
     <section class="telemetry-specs-grid" aria-label="Device Hardware Telemetry">
       <div class="spec-card">
         <span class="spec-label">CPU Cores</span>
@@ -49,44 +52,81 @@
         <span class="spec-val" id="specPlatform">Detecting...</span>
       </div>
       <div class="spec-card">
-        <span class="spec-label">Resolution & DPR</span>
+        <span class="spec-label">Display & DPR</span>
         <span class="spec-val" id="specResolution">Detecting...</span>
       </div>
       <div class="spec-card">
-        <span class="spec-label">Memory Est.</span>
+        <span class="spec-label">Device Memory</span>
         <span class="spec-val" id="specMemory">Detecting...</span>
       </div>
       <div class="spec-card">
-        <span class="spec-label">Battery Status</span>
+        <span class="spec-label">Battery Level</span>
         <span class="spec-val" id="specBattery">Detecting...</span>
+      </div>
+    </section>
+
+    <!-- Quick Presets Bar -->
+    <section class="presets-section">
+      <span class="section-badge">QUICK HARDWARE PRESETS</span>
+      <div class="presets-bar">
+        <button class="preset-btn" data-preset="mobile">
+          <span class="preset-icon">📱</span>
+          <span class="preset-text">Mobile / Safe</span>
+        </button>
+        <button class="preset-btn active" data-preset="balanced">
+          <span class="preset-icon">⚖️</span>
+          <span class="preset-text">Balanced Daily</span>
+        </button>
+        <button class="preset-btn" data-preset="extreme">
+          <span class="preset-icon">🚀</span>
+          <span class="preset-text">Extreme Gaming</span>
+        </button>
+        <button class="preset-btn" data-preset="ultra">
+          <span class="preset-icon">🔥</span>
+          <span class="preset-text">Ultra Torture</span>
+        </button>
       </div>
     </section>
 
     <!-- Test Mode Bar -->
     <section class="mode-selector">
       <button class="mode-btn" data-mode="cpu">
-        <span>⚙️ CPU Stress</span>
-        <span class="mode-desc">Multi-thread Math & Crypto</span>
+        <span class="mode-icon">⚙️</span>
+        <div class="mode-info">
+          <span class="mode-title">CPU Stress Only</span>
+          <span class="mode-desc">Multi-core Math, Matrix & Cryptographic Hash</span>
+        </div>
       </button>
       <button class="mode-btn" data-mode="gpu">
-        <span>🎮 GPU Stress</span>
-        <span class="mode-desc">WebGL 3D Fractal & Shaders</span>
+        <span class="mode-icon">🎮</span>
+        <div class="mode-info">
+          <span class="mode-title">GPU Stress Only</span>
+          <span class="mode-desc">WebGL 3D Volumetric Fractal & Particle Vortex</span>
+        </div>
       </button>
       <button class="mode-btn active" data-mode="combined">
-        <span>🔥 Combined Max Load</span>
-        <span class="mode-desc">Thermal & Power Throttling</span>
+        <span class="mode-icon">🔥</span>
+        <div class="mode-info">
+          <span class="mode-title">Combined Full Load</span>
+          <span class="mode-desc">Concurrent 100% CPU + GPU Max Thermal Torture</span>
+        </div>
       </button>
       <button class="mode-btn" data-mode="benchmark">
-        <span>🏆 Benchmark (60s)</span>
-        <span class="mode-desc">Standardized Scoring Test</span>
+        <span class="mode-icon">🏆</span>
+        <div class="mode-info">
+          <span class="mode-title">Benchmark Run (60s)</span>
+          <span class="mode-desc">Standardized Cross-Platform Performance Score</span>
+        </div>
       </button>
     </section>
 
-    <!-- Configuration Controls -->
+    <!-- Configuration Control Panels -->
     <section class="control-grid">
       <!-- CPU Controls -->
       <div class="control-panel" id="cpuControls">
-        <h3>⚙️ CPU Configuration</h3>
+        <div class="panel-header">
+          <h3>⚙️ CPU Stress Configuration</h3>
+        </div>
         <div class="param-group">
           <div class="param-label">
             <span>Worker Threads</span>
@@ -97,37 +137,50 @@
         <div class="param-group">
           <div class="param-label">
             <span>Core Duty Cycle / Load</span>
-            <span class="param-val" id="loadVal">100%</span>
+            <span class="param-val" id="loadVal">85%</span>
           </div>
-          <input type="range" id="loadSlider" min="20" max="100" step="5" value="100">
+          <input type="range" id="loadSlider" min="20" max="100" step="5" value="85">
         </div>
       </div>
 
       <!-- GPU Controls -->
       <div class="control-panel" id="gpuControls">
-        <h3>🎮 GPU Configuration</h3>
-        <div class="param-group">
-          <label class="param-label" for="resScale">Resolution Scale / Supersampling</label>
-          <select id="resScale">
-            <option value="0.5">0.5x (Mobile / Battery Saver)</option>
-            <option value="1.0" selected>1.0x (Native Display)</option>
-            <option value="1.5">1.5x (High Quality)</option>
-            <option value="2.0">2.0x (Extreme Supersampling)</option>
-            <option value="4.0">4.0x (4K/8K Maximum Stress)</option>
-          </select>
+        <div class="panel-header">
+          <h3>🎮 GPU Stress Configuration</h3>
+        </div>
+        <div class="controls-row">
+          <div class="param-group">
+            <label class="param-label" for="resScale">Resolution Scale</label>
+            <select id="resScale">
+              <option value="0.5">0.5x (Battery Saver)</option>
+              <option value="1.0" selected>1.0x (Native Display)</option>
+              <option value="1.5">1.5x (High Quality)</option>
+              <option value="2.0">2.0x (Extreme Supersampling)</option>
+            </select>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="stressIntensity">Shader Complexity</label>
+            <select id="stressIntensity">
+              <option value="light">Light (48 Steps)</option>
+              <option value="balanced" selected>Balanced (72 Steps)</option>
+              <option value="extreme">Extreme (96 Steps)</option>
+            </select>
+          </div>
         </div>
         <div class="param-group">
-          <label class="param-label" for="shaderMode">Shader Workload</label>
+          <label class="param-label" for="shaderMode">Shader Workload Mode</label>
           <select id="shaderMode">
-            <option value="fractal" selected>Raymarched 3D Volumetric Fractal</option>
-            <option value="particles">FurMark Particle Vortex (400k Points)</option>
+            <option value="fractal" selected>Raymarched 3D Mandelbulb Fractal</option>
+            <option value="particles">FurMark Particle Vortex (250k Points)</option>
           </select>
         </div>
       </div>
 
       <!-- Session Controls -->
-      <div class="control-panel">
-        <h3>⏱️ Session Parameters</h3>
+      <div class="control-panel session-panel">
+        <div class="panel-header">
+          <h3>⏱️ Execution Controls</h3>
+        </div>
         <div class="param-group">
           <label class="param-label" for="durationSelect">Test Duration</label>
           <select id="durationSelect">
@@ -140,61 +193,74 @@
         </div>
         <div class="action-bar">
           <button id="startBtn" class="btn-primary">▶ START STRESS TEST</button>
-          <button id="emergencyBtn" class="btn-emergency" title="Immediately abort all threads and shaders">⚠️ THERMAL HALT</button>
+          <button id="emergencyBtn" class="btn-emergency" title="Immediately halt all workloads">⚠️ THERMAL HALT</button>
         </div>
       </div>
     </section>
 
     <!-- Real-time Live Metrics -->
     <section class="metrics-grid">
-      <div class="metric-card">
+      <div class="metric-card cyan">
         <span class="metric-title">GPU Frame Rate</span>
         <span class="metric-number" id="metricFps">0</span>
         <span class="metric-sub">Frames Per Second</span>
       </div>
       <div class="metric-card pink">
-        <span class="metric-title">Frame Time</span>
+        <span class="metric-title">Render Latency</span>
         <span class="metric-number" id="metricFrameTime">0 ms</span>
-        <span class="metric-sub">GPU Render Latency</span>
+        <span class="metric-sub">Frame Time</span>
       </div>
       <div class="metric-card yellow">
         <span class="metric-title">1% Low FPS</span>
         <span class="metric-number" id="metricLowFps">0</span>
-        <span class="metric-sub">Frame Stability Metric</span>
+        <span class="metric-sub">Stutter & Frame Drops</span>
       </div>
       <div class="metric-card green">
         <span class="metric-title">CPU Throughput</span>
         <span class="metric-number" id="metricCpuOps">0.00 M/s</span>
         <span class="metric-sub">Million Ops / Second</span>
       </div>
-      <div class="metric-card">
+      <div class="metric-card purple">
         <span class="metric-title">Total Calculations</span>
         <span class="metric-number" id="metricTotalOps">0</span>
-        <span class="metric-sub">Cumulative Ops Done</span>
+        <span class="metric-sub">Cumulative Ops Finished</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-title">Thermal Stability</span>
+        <div id="thermalBadge" class="thermal-badge stable">NOMINAL</div>
+        <span class="metric-sub">Throttle Degradation</span>
       </div>
       <div class="metric-card">
         <span class="metric-title">Elapsed / Remaining</span>
-        <span class="metric-number"><span id="metricElapsed">00:00</span> / <span id="metricRemaining">01:00</span></span>
-        <span class="metric-sub">Test Timeline</span>
+        <span class="metric-number time-metric"><span id="metricElapsed">00:00</span> / <span id="metricRemaining">01:00</span></span>
+        <span class="metric-sub">Session Timeline</span>
       </div>
     </section>
 
     <!-- Visual Rendering Viewport & Real-time Chart -->
     <section class="viewport-row">
+      <!-- GPU WebGL Canvas -->
       <div class="canvas-panel">
         <div class="canvas-panel-header">
-          <span>WebGL Stress Viewport</span>
-          <span>GPU Render</span>
+          <div class="panel-title-with-dot">
+            <span class="dot-indicator green"></span>
+            <span>3D WebGL Stress Viewport</span>
+          </div>
+          <button id="fullscreenBtn" class="btn-icon" title="Toggle Fullscreen">⛶ Fullscreen</button>
         </div>
-        <div class="canvas-wrapper">
+        <div class="canvas-wrapper canvas-wrapper-gpu">
           <canvas id="gpuCanvas"></canvas>
         </div>
       </div>
 
+      <!-- Live Telemetry Graph -->
       <div class="canvas-panel">
         <div class="canvas-panel-header">
-          <span>Real-time Telemetry Telemetry</span>
-          <span>FPS vs CPU Load</span>
+          <div class="panel-title-with-dot">
+            <span class="dot-indicator cyan"></span>
+            <span>Dual-Axis Telemetry Stream</span>
+          </div>
+          <span class="live-tag">LIVE 60S</span>
         </div>
         <div class="canvas-wrapper">
           <canvas id="telemetryChart"></canvas>
@@ -202,12 +268,17 @@
       </div>
     </section>
 
-    <!-- Benchmark Score Summary Card (Visible after benchmark completion) -->
+    <!-- Benchmark Result Card (Displayed when 60s benchmark finishes) -->
     <section id="benchmarkResultCard" class="benchmark-card">
-      <h3>🏆 Benchmark Results Completed</h3>
-      <p>Standardized 60-second cross-platform performance rating:</p>
+      <div class="benchmark-header">
+        <div>
+          <h3>🏆 Standardized Benchmark Complete</h3>
+          <p class="benchmark-subtitle">60-second calibrated performance score:</p>
+        </div>
+        <button id="copyReportBtn" class="btn-copy">📋 COPY REPORT</button>
+      </div>
       <div class="benchmark-scores-row">
-        <div class="score-box">
+        <div class="score-box highlight">
           <span class="score-label">Overall Composite Score</span>
           <span class="score-val" id="scoreTotal">0</span>
         </div>
@@ -225,19 +296,22 @@
     <!-- Diagnostic Log Console -->
     <section class="log-panel">
       <div class="log-header">
-        <h4>System & Worker Diagnostics Log</h4>
-        <button id="clearLogBtn" class="btn-small">Clear Logs</button>
+        <div class="panel-title-with-dot">
+          <span class="dot-indicator yellow"></span>
+          <h4>Hardware & Worker Diagnostics Console</h4>
+        </div>
+        <button id="clearLogBtn" class="btn-small">Clear Log</button>
       </div>
       <div class="log-container" id="logContainer">
-        <!-- Dynamically populated -->
+        <!-- Dynamically populated entries -->
       </div>
     </section>
 
   </main>
 
-  <!-- Footer -->
+  <!-- App Footer -->
   <footer class="app-footer">
-    <p>Browser Stress Test &bull; Open Source on GitHub: <a href="https://github.com/amitpadhan979/browser-stress-test" target="_blank" rel="noopener">amitpadhan979/browser-stress-test</a> &bull; Works on Desktops, Laptops, Phones, & Tablets.</p>
+    <p>⚡ <strong>Browser Stress Test</strong> &bull; Free & Open Source on GitHub: <a href="https://github.com/amitpadhan979/browser-stress-test" target="_blank" rel="noopener">amitpadhan979/browser-stress-test</a> &bull; Works smoothly on Phones, Tablets, Laptops & Desktops.</p>
   </footer>
 
   <script type="module" src="js/app.js"></script>

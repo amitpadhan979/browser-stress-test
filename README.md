@@ -10,26 +10,30 @@
 
 ## 🌟 Key Features
 
-- **Multi-Threaded CPU Stress Engine**:
+- **Memory-Safe Multi-Threaded CPU Engine**:
   - Leverages browser **Web Workers** scaled to your system's hardware concurrency (`navigator.hardwareConcurrency`).
+  - Pre-allocated TypedArray buffers eliminate Garbage Collection pauses and OOM browser freezes.
+  - Macrotask event loop yielding prevents microtask starvation, ensuring responsive stop and pause commands.
   - Combines matrix multiplications, heavy 64-bit transcendental floating-point arithmetic (`Math.sin`, `Math.cos`, `Math.tan`, `Math.atan`), and cryptographic hashing rounds.
   - Adjustable worker thread count (1 to 32+ threads) and configurable core duty cycle (20% to 100%).
-  - Tracks operations per second (MOps/s) and cumulative calculation count in real-time.
 
-- **GPU Stress Engine (WebGL 2.0 / WebGL Fallback)**:
-  - **Volumetric 3D Mandelbulb Fractal**: Computes raymarched sphere tracing with up to 96 iterative steps per pixel, dynamic trigonometric folds, ambient occlusion, and Blinn-Phong specular lighting to heavily tax fragment shader ALUs.
-  - **FurMark-Style Particle Vortex**: Simulates 300,000–500,000 instanced dynamic 3D particles swirling in real-time, stressing vertex pipelines and rasterizer fill rates.
-  - **Resolution Scaling**: Supports 0.5x (mobile/power-saver), 1.0x (native display), 1.5x, 2.0x, and 4.0x (extreme 4K/8K supersampling) to challenge flagship desktop GPUs.
-  - Real-time framerate tracking: Current FPS, Frame Time (ms), and **1% Low FPS** to detect frame drops and thermal stuttering.
+- **Crash-Resistant GPU Stress Engine (WebGL 2.0 / WebGL Fallback)**:
+  - **Volumetric 3D Mandelbulb Fractal**: Computes raymarched sphere tracing with adaptive steps (48 to 96), dynamic trigonometric folds, ambient occlusion, and Blinn-Phong specular lighting.
+  - **FurMark-Style Particle Vortex**: Simulates 250,000–500,000 instanced dynamic 3D particles swirling in real-time.
+  - **Safe Clamping & Recovery**: Clamps viewport dimensions to hardware safe limits (max 2560px) to prevent VRAM overflow and driver crashes on high-DPI screens; includes graceful WebGL Context Lost recovery.
+  - Framerate tracking: Real-time FPS, Render Latency (ms), and **1% Low FPS**.
 
-- **Combined Thermal & Power Throttling Mode**:
-  - Saturates both CPU and GPU concurrently to test device cooling efficiency, fan curves, and battery drain rates under extreme load.
+- **Quick Hardware Presets**:
+  - 📱 **Mobile / Safe**: Optimized for smartphones and battery preservation (low threads, 0.5x scale).
+  - ⚖️ **Balanced Daily**: Standard everyday stability check (native scale, balanced shaders).
+  - 🚀 **Extreme Gaming**: Pushes desktop hardware to maximum clock speeds.
+  - 🔥 **Ultra Torture**: Supersampled dual-thread torture test.
+
+- **Real-Time Thermal Throttling Degradation Index**:
+  - Automatically calculates performance drop-off against cold baselines to detect when thermal throttling or power limits engage.
 
 - **Standardized Benchmark Mode (60s)**:
-  - Runs a calibrated 60-second test across CPU and GPU pipelines to produce an aggregate **Performance Score** for cross-device comparisons.
-
-- **Live Hardware Telemetry**:
-  - Real-time detection of CPU logical cores, unmasked GPU vendor and renderer (`WEBGL_debug_renderer_info`), screen resolution & device pixel ratio, estimated device memory, and battery charging state / level (`navigator.getBattery()`).
+  - Runs a calibrated 60-second test across CPU and GPU pipelines to produce an aggregate **Performance Score** with one-click clipboard export.
 
 - **Safety & Thermal Controls**:
   - Instant **Thermal Halt** emergency abort button.

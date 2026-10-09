@@ -1,6 +1,7 @@
 /**
  * Main Application Coordinator
- * Connects UI, Hardware Telemetry, CPU Worker Pool, GPU WebGL Pipeline, and Benchmark Suite.
+ * Connects UI, Hardware Telemetry, CPU Worker Pool, GPU WebGL Pipeline,
+ * Presets, Thermal Degradation Detection, and Benchmark Suite.
  */
 
 import { DeviceInfo } from './device-info.js';
@@ -18,62 +19,92 @@ class StressApp {
     // Test state
     this.currentMode = 'combined'; // 'cpu' | 'gpu' | 'combined' | 'benchmark'
     this.isRunning = false;
-    this.isPaused = false;
     this.testDurationSeconds = 60; // 0 = infinite
     this.elapsedSeconds = 0;
     this.timerInterval = null;
     this.chartInterval = null;
 
-    // Metrics snapshot for scoring
+    // Thermal throttling tracking
+    this.baselineOps = 0;
+    this.baselineFps = 0;
+    this.warmupSamplesCount = 0;
+    this.thermalStatus = 'NOMINAL';
+
+    // Benchmark samples
     this.scoreSamples = [];
+
+    // UI Throttle state
+    this.lastUiUpdateTime = 0;
 
     this.initDOM();
   }
 
   async init() {
-    // Probe Hardware
+    // 1. Probe Hardware
     const info = await this.deviceInfo.init();
     this.renderDeviceInfo(info);
 
-    // Initialize GPU Stress Engine
+    // 2. Initialize GPU Stress Engine
     const glCanvas = document.getElementById('gpuCanvas');
     try {
       this.gpuStress = new GPUStress(glCanvas);
       this.gpuStress.init();
+
+      this.gpuStress.onContextLost = () => {
+        this.log('GPU Context Lost! Performance throttled by OS or driver.', 'error');
+        this.updateThermalBadge('GPU CONTEXT RESET', 'throttling-heavy');
+      };
+
+      this.gpuStress.onContextRestored = () => {
+        this.log('GPU Context Restored successfully.', 'success');
+      };
+
       this.log('GPU WebGL pipeline initialized successfully.', 'success');
     } catch (e) {
       this.log(`WebGL Init Error: ${e.message}`, 'error');
     }
 
-    // Initialize Chart
+    // 3. Initialize Chart
     const chartCanvas = document.getElementById('telemetryChart');
     this.chart = new TelemetryChart(chartCanvas);
     this.chart.resize();
+
     window.addEventListener('resize', () => {
       this.chart.resize();
       if (this.gpuStress) this.gpuStress.updateViewportSize();
     });
 
-    // Wire Metrics Callbacks
+    // 4. Wire Metrics Callbacks
     this.cpuManager.onMetricsUpdate = (metrics) => this.handleCpuMetrics(metrics);
     if (this.gpuStress) {
       this.gpuStress.onMetricsUpdate = (metrics) => this.handleGpuMetrics(metrics);
     }
 
-    // Set Default UI states
+    // 5. Default UI Config
+    this.applyPreset('balanced');
     this.updateControlsUI();
-    this.log(`Ready. Detected ${info.cpuCores} logical CPU cores and ${info.gpuRenderer}.`, 'info');
+    this.log(`System ready. Detected ${info.cpuCores} cores & ${info.gpuRenderer}.`, 'info');
   }
 
   initDOM() {
-    // Mode Buttons
+    // Test Mode Buttons
     document.querySelectorAll('.mode-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         if (this.isRunning) return;
         document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.currentMode = btn.dataset.mode;
         this.updateControlsUI();
+      });
+    });
+
+    // Preset Buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.isRunning) return;
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.applyPreset(btn.dataset.preset);
       });
     });
 
@@ -84,8 +115,9 @@ class StressApp {
     // Sliders & Selectors
     const threadsSlider = document.getElementById('threadsSlider');
     const threadsVal = document.getElementById('threadsVal');
-    threadsSlider.max = Math.max(16, (navigator.hardwareConcurrency || 4) * 2);
-    threadsSlider.value = navigator.hardwareConcurrency || 4;
+    const cores = navigator.hardwareConcurrency || 4;
+    threadsSlider.max = Math.max(16, cores * 2);
+    threadsSlider.value = cores;
     threadsVal.textContent = threadsSlider.value;
 
     threadsSlider.addEventListener('input', (e) => {
@@ -110,15 +142,86 @@ class StressApp {
       if (this.gpuStress) this.gpuStress.setShaderMode(e.target.value);
     });
 
+    const stressIntensity = document.getElementById('stressIntensity');
+    if (stressIntensity) {
+      stressIntensity.addEventListener('change', (e) => {
+        if (this.gpuStress) this.gpuStress.setStressIntensity(e.target.value);
+      });
+    }
+
     const durationSelect = document.getElementById('durationSelect');
     durationSelect.addEventListener('change', (e) => {
       this.testDurationSeconds = parseInt(e.target.value, 10);
     });
 
+    // Fullscreen Viewport Toggle
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    }
+
+    // Copy Benchmark Result Button
+    const copyReportBtn = document.getElementById('copyReportBtn');
+    if (copyReportBtn) {
+      copyReportBtn.addEventListener('click', () => this.copyBenchmarkReport());
+    }
+
     // Clear Logs
     document.getElementById('clearLogBtn').addEventListener('click', () => {
       document.getElementById('logContainer').innerHTML = '';
     });
+  }
+
+  applyPreset(presetName) {
+    const cores = navigator.hardwareConcurrency || 4;
+    const threadsSlider = document.getElementById('threadsSlider');
+    const threadsVal = document.getElementById('threadsVal');
+    const loadSlider = document.getElementById('loadSlider');
+    const loadVal = document.getElementById('loadVal');
+    const resScale = document.getElementById('resScale');
+    const stressIntensity = document.getElementById('stressIntensity');
+
+    switch (presetName) {
+      case 'mobile':
+        threadsSlider.value = Math.max(1, Math.floor(cores / 2));
+        loadSlider.value = 60;
+        resScale.value = '0.5';
+        if (stressIntensity) stressIntensity.value = 'light';
+        if (this.gpuStress) this.gpuStress.setStressIntensity('light');
+        break;
+
+      case 'balanced':
+        threadsSlider.value = cores;
+        loadSlider.value = 85;
+        resScale.value = '1.0';
+        if (stressIntensity) stressIntensity.value = 'balanced';
+        if (this.gpuStress) this.gpuStress.setStressIntensity('balanced');
+        break;
+
+      case 'extreme':
+        threadsSlider.value = cores;
+        loadSlider.value = 100;
+        resScale.value = '1.5';
+        if (stressIntensity) stressIntensity.value = 'extreme';
+        if (this.gpuStress) this.gpuStress.setStressIntensity('extreme');
+        break;
+
+      case 'ultra':
+        threadsSlider.value = Math.min(32, cores * 2);
+        loadSlider.value = 100;
+        resScale.value = '2.0';
+        if (stressIntensity) stressIntensity.value = 'extreme';
+        if (this.gpuStress) this.gpuStress.setStressIntensity('extreme');
+        break;
+    }
+
+    threadsVal.textContent = threadsSlider.value;
+    loadVal.textContent = `${loadSlider.value}%`;
+    this.cpuManager.setThreads(parseInt(threadsSlider.value, 10));
+    this.cpuManager.setLoadPercentage(parseInt(loadSlider.value, 10));
+    if (this.gpuStress) this.gpuStress.setResolutionScale(parseFloat(resScale.value));
+
+    this.log(`Preset applied: [${presetName.toUpperCase()}].`, 'info');
   }
 
   renderDeviceInfo(info) {
@@ -168,12 +271,17 @@ class StressApp {
     this.isRunning = true;
     this.elapsedSeconds = 0;
     this.scoreSamples = [];
+    this.baselineOps = 0;
+    this.baselineFps = 0;
+    this.warmupSamplesCount = 0;
+
     document.getElementById('startBtn').textContent = '⏹ STOP STRESS TEST';
     document.getElementById('startBtn').classList.add('btn-danger');
     document.getElementById('statusBadge').textContent = `RUNNING [${this.currentMode.toUpperCase()}]`;
     document.getElementById('statusBadge').className = 'status-badge running';
     document.getElementById('benchmarkResultCard').style.display = 'none';
 
+    this.updateThermalBadge('STABLE / CALIBRATING', 'stable');
     this.chart.clear();
 
     const threads = parseInt(document.getElementById('threadsSlider').value, 10);
@@ -196,23 +304,25 @@ class StressApp {
       }
     }
 
-    // Timer Loop
+    // Master 1-second interval
     this.timerInterval = setInterval(() => {
       this.elapsedSeconds++;
       this.updateTimerDisplay();
 
       // Check auto stop
       if (this.testDurationSeconds > 0 && this.elapsedSeconds >= this.testDurationSeconds) {
-        this.log(`Test duration (${this.testDurationSeconds}s) reached. Halting stress test.`, 'success');
+        this.log(`Completed targeted duration (${this.testDurationSeconds}s).`, 'success');
         this.stop(true);
       }
     }, 1000);
 
-    // Chart telemetry sampler (every 500ms)
+    // Telemetry & Thermal sampling loop (every 500ms)
     this.chartInterval = setInterval(() => {
       const currentFps = this.gpuStress ? this.gpuStress.fps : 0;
       const currentMops = (this.cpuManager.currentOpsPerSec / 1000000);
       this.chart.addPoint(currentFps, currentMops);
+
+      this.checkThermalThrottling(currentMops, currentFps);
 
       if (this.currentMode === 'benchmark') {
         this.scoreSamples.push({
@@ -222,7 +332,46 @@ class StressApp {
       }
     }, 500);
 
-    this.log(`Stress test started in ${this.currentMode.toUpperCase()} mode.`, 'warning');
+    this.log(`Stress test started: [${this.currentMode.toUpperCase()}].`, 'warning');
+  }
+
+  checkThermalThrottling(currentMops, currentFps) {
+    if (this.elapsedSeconds < 3) return; // Warm-up phase
+
+    if (this.warmupSamplesCount < 6) {
+      this.warmupSamplesCount++;
+      if (currentMops > this.baselineOps) this.baselineOps = currentMops;
+      if (currentFps > this.baselineFps) this.baselineFps = currentFps;
+      return;
+    }
+
+    // Calculate performance decay compared to baseline
+    let cpuDecay = 0;
+    if (this.baselineOps > 0 && (this.currentMode === 'cpu' || this.currentMode === 'combined')) {
+      cpuDecay = (this.baselineOps - currentMops) / this.baselineOps;
+    }
+
+    let gpuDecay = 0;
+    if (this.baselineFps > 0 && (this.currentMode === 'gpu' || this.currentMode === 'combined')) {
+      gpuDecay = (this.baselineFps - currentFps) / this.baselineFps;
+    }
+
+    const maxDecay = Math.max(cpuDecay, gpuDecay);
+
+    if (maxDecay >= 0.35) {
+      this.updateThermalBadge(`HEAVY THROTTLE (-${Math.round(maxDecay * 100)}%)`, 'throttling-heavy');
+    } else if (maxDecay >= 0.15) {
+      this.updateThermalBadge(`MILD THROTTLE (-${Math.round(maxDecay * 100)}%)`, 'throttling-mild');
+    } else {
+      this.updateThermalBadge('THERMAL STABLE', 'stable');
+    }
+  }
+
+  updateThermalBadge(text, className) {
+    const badge = document.getElementById('thermalBadge');
+    if (!badge) return;
+    badge.textContent = text;
+    badge.className = `thermal-badge ${className}`;
   }
 
   stop(finishedNaturally = false) {
@@ -238,17 +387,29 @@ class StressApp {
     document.getElementById('statusBadge').textContent = 'IDLE';
     document.getElementById('statusBadge').className = 'status-badge idle';
 
-    // Calculate score if benchmark mode finished
     if (this.currentMode === 'benchmark' && (finishedNaturally || this.scoreSamples.length >= 10)) {
       this.calculateBenchmarkScore();
     }
 
-    this.log('Stress test stopped.', 'info');
+    this.log('Stress test halted.', 'info');
   }
 
   emergencyStop() {
     this.log('EMERGENCY THERMAL HALT TRIGGERED BY USER!', 'error');
     this.stop(false);
+  }
+
+  toggleFullscreen() {
+    const canvasWrapper = document.querySelector('.canvas-wrapper-gpu');
+    if (!canvasWrapper) return;
+
+    if (!document.fullscreenElement) {
+      canvasWrapper.requestFullscreen().catch(err => {
+        console.error('Fullscreen request failed:', err);
+      });
+    } else {
+      document.exitFullscreen();
+    }
   }
 
   updateTimerDisplay() {
@@ -272,6 +433,10 @@ class StressApp {
   }
 
   handleCpuMetrics(metrics) {
+    const now = performance.now();
+    if (now - this.lastUiUpdateTime < 150) return; // Smooth RAF limit
+    this.lastUiUpdateTime = now;
+
     const mops = (metrics.currentOpsPerSec / 1000000).toFixed(2);
     document.getElementById('metricCpuOps').textContent = `${mops} M/s`;
     document.getElementById('metricTotalOps').textContent = (metrics.totalCalculations).toLocaleString();
@@ -286,12 +451,10 @@ class StressApp {
   calculateBenchmarkScore() {
     if (this.scoreSamples.length === 0) return;
 
-    // Discard initial warm-up samples
-    const valid = this.scoreSamples.slice(Math.min(3, this.scoreSamples.length - 1));
+    const valid = this.scoreSamples.slice(Math.min(4, this.scoreSamples.length - 1));
     const avgFps = valid.reduce((a, b) => a + b.fps, 0) / valid.length;
     const avgMops = valid.reduce((a, b) => a + b.mops, 0) / valid.length;
 
-    // Weighted composite score
     const cpuScore = Math.round(avgMops * 150);
     const gpuScore = Math.round(avgFps * 85);
     const totalScore = cpuScore + gpuScore;
@@ -301,11 +464,43 @@ class StressApp {
     document.getElementById('scoreCpu').textContent = cpuScore.toLocaleString();
     document.getElementById('scoreGpu').textContent = gpuScore.toLocaleString();
 
-    this.log(`Benchmark completed! Total Score: ${totalScore} (CPU: ${cpuScore}, GPU: ${gpuScore})`, 'success');
+    this.lastBenchmarkReport = {
+      totalScore,
+      cpuScore,
+      gpuScore,
+      avgFps: Math.round(avgFps),
+      avgMops: avgMops.toFixed(2),
+      cpuCores: this.deviceInfo.data.cpuCores,
+      gpuRenderer: this.deviceInfo.data.gpuRenderer,
+      os: this.deviceInfo.data.os
+    };
+
+    this.log(`Benchmark completed! Total Score: ${totalScore.toLocaleString()} (CPU: ${cpuScore}, GPU: ${gpuScore})`, 'success');
+  }
+
+  copyBenchmarkReport() {
+    if (!this.lastBenchmarkReport) return;
+    const r = this.lastBenchmarkReport;
+    const text = `⚡ Browser Stress Test Benchmark Result\n` +
+      `-----------------------------------------\n` +
+      `🏆 Total Composite Score: ${r.totalScore.toLocaleString()}\n` +
+      `⚙️ CPU Score: ${r.cpuScore.toLocaleString()} (${r.avgMops} MOps/s | ${r.cpuCores} Cores)\n` +
+      `🎮 GPU Score: ${r.gpuScore.toLocaleString()} (${r.avgFps} FPS | ${r.gpuRenderer})\n` +
+      `📱 OS/Platform: ${r.os}\n` +
+      `🔗 Tested at: https://amitpadhan979.github.io/browser-stress-test/`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('copyReportBtn');
+      btn.textContent = '✓ COPIED TO CLIPBOARD!';
+      setTimeout(() => { btn.textContent = '📋 COPY REPORT'; }, 2500);
+    }).catch(err => {
+      console.error('Copy failed:', err);
+    });
   }
 
   log(message, type = 'info') {
     const container = document.getElementById('logContainer');
+    if (!container) return;
     const time = new Date().toLocaleTimeString();
     const entry = document.createElement('div');
     entry.className = `log-entry log-${type}`;
@@ -315,7 +510,6 @@ class StressApp {
   }
 }
 
-// Instantiate on DOM load
 window.addEventListener('DOMContentLoaded', () => {
   const app = new StressApp();
   app.init();

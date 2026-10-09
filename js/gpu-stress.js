@@ -1,7 +1,7 @@
 /**
  * GPU Stress Test Engine
  * WebGL 2.0 / WebGL 1.0 Shader Pipeline
- * Features heavy raymarched 3D fractal and 400k+ dynamic particle storm.
+ * Features safe resolution clamping, adaptive raymarching steps, and context recovery.
  */
 
 export class GPUStress {
@@ -11,7 +11,8 @@ export class GPUStress {
     this.animationFrameId = null;
     this.isRunning = false;
     this.shaderMode = 'fractal'; // 'fractal' | 'particles'
-    this.resolutionScale = 1.0; // 0.5, 1.0, 1.5, 2.0, 4.0
+    this.resolutionScale = 1.0;
+    this.stressIntensity = 'balanced'; // 'light' (48 steps), 'balanced' (72 steps), 'extreme' (96 steps)
 
     // Performance telemetry
     this.fps = 0;
@@ -22,27 +23,69 @@ export class GPUStress {
     this.startTime = performance.now();
     this.frameCount = 0;
     this.onMetricsUpdate = null;
+    this.onContextLost = null;
+    this.onContextRestored = null;
 
     // WebGL Objects
     this.fractalProgram = null;
     this.particleProgram = null;
     this.quadBuffer = null;
     this.particleBuffer = null;
-    this.numParticles = 300000;
+    this.numParticles = 250000;
+
+    // Hardware bounds
+    this.maxSafeDim = 2560; // Clamped to prevent VRAM overflow and driver crashes
+
+    this.setupContextListeners();
+  }
+
+  setupContextListeners() {
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      console.warn('WebGL context lost! Halting render loop and awaiting restoration...');
+      if (this.animationFrameId) {
+        cancelAnimationFrame(this.animationFrameId);
+        this.animationFrameId = null;
+      }
+      this.isRunning = false;
+      if (this.onContextLost) this.onContextLost();
+    }, false);
+
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      console.log('WebGL context restored! Re-initializing shaders and buffers...');
+      try {
+        this.init();
+        if (this.onContextRestored) this.onContextRestored();
+      } catch (err) {
+        console.error('Failed to restore WebGL context:', err);
+      }
+    }, false);
   }
 
   init() {
     this.gl = this.canvas.getContext('webgl2', {
       powerPreference: 'high-performance',
       desynchronized: true,
-      antialias: false
+      antialias: false,
+      preserveDrawingBuffer: false
     }) || this.canvas.getContext('webgl', {
       powerPreference: 'high-performance',
-      antialias: false
+      antialias: false,
+      preserveDrawingBuffer: false
     });
 
     if (!this.gl) {
       throw new Error('WebGL is not supported in this browser environment.');
+    }
+
+    // Determine hardware limit
+    try {
+      const maxDims = this.gl.getParameter(this.gl.MAX_VIEWPORT_DIMS);
+      if (maxDims && maxDims[0]) {
+        this.maxSafeDim = Math.min(2560, maxDims[0]);
+      }
+    } catch (e) {
+      this.maxSafeDim = 2048;
     }
 
     this.initBuffers();
@@ -52,7 +95,7 @@ export class GPUStress {
   }
 
   setResolutionScale(scale) {
-    this.resolutionScale = Math.max(0.5, Math.min(4.0, scale));
+    this.resolutionScale = Math.max(0.5, Math.min(3.0, scale));
     this.updateViewportSize();
   }
 
@@ -60,21 +103,32 @@ export class GPUStress {
     this.shaderMode = mode;
   }
 
+  setStressIntensity(intensity) {
+    this.stressIntensity = intensity;
+    this.initFractalShader(); // Recompile with optimal step count
+  }
+
   setParticleCount(count) {
-    this.numParticles = Math.max(10000, Math.min(1000000, count));
+    this.numParticles = Math.max(10000, Math.min(600000, count));
     this.initParticleBuffer();
   }
 
   updateViewportSize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.0); // Clamp DPR to 2.0 to prevent mobile crashes
     const rect = this.canvas.getBoundingClientRect();
-    const width = Math.max(300, Math.floor((rect.width || 800) * dpr * this.resolutionScale));
-    const height = Math.max(200, Math.floor((rect.height || 500) * dpr * this.resolutionScale));
+
+    // Safely calculate clamped dimensions
+    let width = Math.floor((rect.width || 800) * dpr * this.resolutionScale);
+    let height = Math.floor((rect.height || 500) * dpr * this.resolutionScale);
+
+    width = Math.max(320, Math.min(this.maxSafeDim, width));
+    height = Math.max(240, Math.min(this.maxSafeDim, height));
 
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
     }
+
     if (this.gl) {
       this.gl.viewport(0, 0, width, height);
     }
@@ -108,7 +162,6 @@ export class GPUStress {
   }
 
   initBuffers() {
-    // Screen quad for raymarching
     const quadVertices = new Float32Array([
       -1, -1,
        1, -1,
@@ -117,7 +170,9 @@ export class GPUStress {
        1, -1,
        1,  1
     ]);
-    this.quadBuffer = this.gl.createBuffer();
+    if (!this.quadBuffer) {
+      this.quadBuffer = this.gl.createBuffer();
+    }
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.quadBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, quadVertices, this.gl.STATIC_DRAW);
 
@@ -143,6 +198,10 @@ export class GPUStress {
   }
 
   initFractalShader() {
+    let steps = 72;
+    if (this.stressIntensity === 'light') steps = 48;
+    if (this.stressIntensity === 'extreme') steps = 96;
+
     const vs = `
       attribute vec2 a_position;
       varying vec2 v_uv;
@@ -152,18 +211,16 @@ export class GPUStress {
       }
     `;
 
-    // Heavy Raymarched Mandelbulb Fractal Shader (Iterative Math)
     const fs = `
       precision highp float;
       varying vec2 v_uv;
       uniform vec2 u_resolution;
       uniform float u_time;
 
-      const int MAX_STEPS = 96;
-      const float SURF_DIST = 0.0015;
-      const float MAX_DIST = 15.0;
+      const int MAX_STEPS = ${steps};
+      const float SURF_DIST = 0.002;
+      const float MAX_DIST = 14.0;
 
-      // Mandelbulb Distance Estimator
       float mandelbulbDE(vec3 pos, out float trap) {
         vec3 z = pos;
         float dr = 1.0;
@@ -171,12 +228,12 @@ export class GPUStress {
         float power = 6.0 + 2.0 * sin(u_time * 0.25);
         trap = 1e10;
 
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < 8; i++) {
           r = length(z);
           if (r > 3.0) break;
           trap = min(trap, r);
 
-          float theta = acos(clamp(z.z / r, -1.0, 1.0));
+          float theta = acos(clamp(z.z / (r + 0.0001), -1.0, 1.0));
           float phi = atan(z.y, z.x);
           dr = pow(r, power - 1.0) * power * dr + 1.0;
 
@@ -187,14 +244,14 @@ export class GPUStress {
           z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
           z += pos;
         }
-        return 0.5 * log(r) * r / dr;
+        return 0.5 * log(max(r, 1.0001)) * r / (dr + 0.0001);
       }
 
       vec3 calcNormal(vec3 p) {
         float trap;
         float d = mandelbulbDE(p, trap);
-        vec2 e = vec2(0.002, 0.0);
-        float t1; float t2; float t3; float t4;
+        vec2 e = vec2(0.003, 0.0);
+        float t1; float t2; float t3;
         vec3 n = d - vec3(
           mandelbulbDE(p - e.xyy, t1),
           mandelbulbDE(p - e.yxy, t2),
@@ -208,8 +265,8 @@ export class GPUStress {
 
         float camDist = 2.4 + 0.3 * sin(u_time * 0.15);
         float rotX = u_time * 0.2;
-        float rotY = u_time * 0.13;
-        vec3 ro = vec3(camDist * cos(rotX), sin(rotY) * 1.0, camDist * sin(rotX));
+        float rotY = u_time * 0.12;
+        vec3 ro = vec3(camDist * cos(rotX), sin(rotY) * 0.9, camDist * sin(rotX));
         vec3 ta = vec3(0.0, 0.0, 0.0);
 
         vec3 ww = normalize(ta - ro);
@@ -219,7 +276,7 @@ export class GPUStress {
 
         float dO = 0.0;
         float trap = 0.0;
-        vec3 col = vec3(0.04, 0.06, 0.09) * (1.0 - length(uv) * 0.4);
+        vec3 col = vec3(0.03, 0.05, 0.08) * (1.0 - length(uv) * 0.4);
 
         for (int i = 0; i < MAX_STEPS; i++) {
           vec3 p = ro + rd * dO;
@@ -230,7 +287,7 @@ export class GPUStress {
             vec3 lightDir = normalize(vec3(1.0, 2.0, -1.0));
             float diff = max(dot(n, lightDir), 0.0);
             float ao = clamp(trap * 2.5, 0.0, 1.0);
-            vec3 baseCol = 0.5 + 0.5 * cos(u_time * 0.5 + trap * 4.0 + vec3(0.0, 1.8, 3.2));
+            vec3 baseCol = 0.5 + 0.5 * cos(u_time * 0.4 + trap * 4.0 + vec3(0.0, 1.8, 3.2));
             col = baseCol * (diff * 0.7 + 0.3) * ao;
             col += pow(max(dot(reflect(-lightDir, n), -rd), 0.0), 16.0) * 0.4;
             break;
@@ -242,6 +299,9 @@ export class GPUStress {
       }
     `;
 
+    if (this.fractalProgram) {
+      this.gl.deleteProgram(this.fractalProgram);
+    }
     this.fractalProgram = this.createProgram(vs, fs);
     this.uResolutionFractal = this.gl.getUniformLocation(this.fractalProgram, 'u_resolution');
     this.uTimeFractal = this.gl.getUniformLocation(this.fractalProgram, 'u_time');
@@ -267,7 +327,7 @@ export class GPUStress {
         );
 
         gl_Position = u_mvp * vec4(rotPos, 1.0);
-        gl_PointSize = clamp(3.0 / (gl_Position.w + 0.01), 1.0, 6.0);
+        gl_PointSize = clamp(3.0 / (gl_Position.w + 0.01), 1.0, 5.0);
         v_color = 0.5 + 0.5 * sin(vec3(0.0, 1.5, 3.0) + angle + u_time);
       }
     `;
@@ -283,6 +343,9 @@ export class GPUStress {
       }
     `;
 
+    if (this.particleProgram) {
+      this.gl.deleteProgram(this.particleProgram);
+    }
     this.particleProgram = this.createProgram(vs, fs);
     this.uMvpParticle = this.gl.getUniformLocation(this.particleProgram, 'u_mvp');
     this.uTimeParticle = this.gl.getUniformLocation(this.particleProgram, 'u_time');
@@ -328,7 +391,7 @@ export class GPUStress {
   }
 
   render() {
-    if (!this.isRunning) return;
+    if (!this.isRunning || !this.gl || this.gl.isContextLost()) return;
 
     const now = performance.now();
     const delta = now - this.lastFrameTime;
@@ -387,7 +450,7 @@ export class GPUStress {
 
       const aspect = this.canvas.width / this.canvas.height;
       const mvp = this.getPerspectiveMatrix((45 * Math.PI) / 180, aspect, 0.1, 100.0);
-      mvp[14] = -8.0; // translate camera back
+      mvp[14] = -8.0;
 
       gl.uniformMatrix4fv(this.uMvpParticle, false, mvp);
       gl.uniform1f(this.uTimeParticle, time);
