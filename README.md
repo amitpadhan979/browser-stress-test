@@ -8,36 +8,18 @@
 
 ---
 
-## 🌟 Key Features
+## 🌟 Simple for Everyone, Powerful Under the Hood
 
-- **Memory-Safe Multi-Threaded CPU Engine**:
-  - Leverages browser **Web Workers** scaled to your system's hardware concurrency (`navigator.hardwareConcurrency`).
-  - Pre-allocated TypedArray buffers eliminate Garbage Collection pauses and OOM browser freezes.
-  - Macrotask event loop yielding prevents microtask starvation, ensuring responsive stop and pause commands.
-  - Combines matrix multiplications, heavy 64-bit transcendental floating-point arithmetic (`Math.sin`, `Math.cos`, `Math.tan`, `Math.atan`), and cryptographic hashing rounds.
-  - Adjustable worker thread count (1 to 32+ threads) and configurable core duty cycle (20% to 100%).
-
-- **Crash-Resistant GPU Stress Engine (WebGL 2.0 / WebGL Fallback)**:
-  - **Volumetric 3D Mandelbulb Fractal**: Computes raymarched sphere tracing with adaptive steps (48 to 96), dynamic trigonometric folds, ambient occlusion, and Blinn-Phong specular lighting.
-  - **FurMark-Style Particle Vortex**: Simulates 250,000–500,000 instanced dynamic 3D particles swirling in real-time.
-  - **Safe Clamping & Recovery**: Clamps viewport dimensions to hardware safe limits (max 2560px) to prevent VRAM overflow and driver crashes on high-DPI screens; includes graceful WebGL Context Lost recovery.
-  - Framerate tracking: Real-time FPS, Render Latency (ms), and **1% Low FPS**.
-
-- **Quick Hardware Presets**:
-  - 📱 **Mobile / Safe**: Optimized for smartphones and battery preservation (low threads, 0.5x scale).
-  - ⚖️ **Balanced Daily**: Standard everyday stability check (native scale, balanced shaders).
-  - 🚀 **Extreme Gaming**: Pushes desktop hardware to maximum clock speeds.
-  - 🔥 **Ultra Torture**: Supersampled dual-thread torture test.
-
-- **Real-Time Thermal Throttling Degradation Index**:
-  - Automatically calculates performance drop-off against cold baselines to detect when thermal throttling or power limits engage.
-
-- **Standardized Benchmark Mode (60s)**:
-  - Runs a calibrated 60-second test across CPU and GPU pipelines to produce an aggregate **Performance Score** with one-click clipboard export.
-
-- **Safety & Thermal Controls**:
-  - Instant **Thermal Halt** emergency abort button.
-  - Configurable auto-stop timers (30s, 1m, 5m, 15m, or continuous).
+- **1-Click Test Experience**:
+  - No complex configurations required. Choose between **🟢 Gentle**, **🟡 Standard**, or **🔴 Maximum**, press **▶ START SPEED TEST**, and get results in seconds.
+- **Understandable Letter Grades & Ratings**:
+  - Automatically awards an easy-to-understand **Letter Grade (S, A+, A, B, C)** with human explanations of device gaming and multitasking capability.
+- **Device Health & Thermal Slowdown Tracker**:
+  - Plain-English status shows whether your device is running **🟢 Cool & Stable**, **🟡 Getting Warm**, or **🔴 Slowing Down (Overheating)** to protect hardware.
+- **Collapsible Advanced Tools for Power Users**:
+  - Manual CPU thread count sliders, duty cycles, WebGL resolution scaling, and real-time dual-axis charts are neatly organized inside an optional **Advanced Settings** drawer.
+- **Memory-Safe Zero-Allocation Architecture**:
+  - Uses pre-allocated TypedArray buffers and macrotask scheduling in Web Workers, guaranteeing zero freezes, zero memory leaks, and instant responsiveness.
 
 ---
 

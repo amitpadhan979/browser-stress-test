@@ -1,7 +1,7 @@
 /**
- * Main Application Coordinator
- * Connects UI, Hardware Telemetry, CPU Worker Pool, GPU WebGL Pipeline,
- * Presets, Thermal Degradation Detection, and Benchmark Suite.
+ * Simple, User-Friendly Stress Test Coordinator
+ * Maps plain-English choices (Gentle, Standard, Maximum) into engine workloads,
+ * tracks thermal health, and produces friendly letter grades (S, A+, A, B, C).
  */
 
 import { DeviceInfo } from './device-info.js';
@@ -9,110 +9,123 @@ import { CPUManager } from './cpu-manager.js';
 import { GPUStress } from './gpu-stress.js';
 import { TelemetryChart } from './chart.js';
 
-class StressApp {
+class FriendlyStressApp {
   constructor() {
     this.deviceInfo = new DeviceInfo();
     this.cpuManager = new CPUManager();
     this.gpuStress = null;
     this.chart = null;
 
-    // Test state
-    this.currentMode = 'combined'; // 'cpu' | 'gpu' | 'combined' | 'benchmark'
+    // Simplified user settings
+    this.selectedIntensity = 'standard'; // 'gentle' | 'standard' | 'maximum'
+    this.selectedDuration = 30; // seconds, 0 = continuous
     this.isRunning = false;
-    this.testDurationSeconds = 60; // 0 = infinite
     this.elapsedSeconds = 0;
     this.timerInterval = null;
     this.chartInterval = null;
 
-    // Thermal throttling tracking
+    // Thermal & performance tracking
     this.baselineOps = 0;
     this.baselineFps = 0;
-    this.warmupSamplesCount = 0;
-    this.thermalStatus = 'NOMINAL';
-
-    // Benchmark samples
+    this.warmupSamples = 0;
     this.scoreSamples = [];
-
-    // UI Throttle state
-    this.lastUiUpdateTime = 0;
+    this.lastUiUpdate = 0;
 
     this.initDOM();
   }
 
   async init() {
-    // 1. Probe Hardware
+    // 1. Probe Device
     const info = await this.deviceInfo.init();
-    this.renderDeviceInfo(info);
+    this.renderDeviceBanner(info);
 
-    // 2. Initialize GPU Stress Engine
+    // 2. Initialize 3D Graphics Viewport
     const glCanvas = document.getElementById('gpuCanvas');
     try {
       this.gpuStress = new GPUStress(glCanvas);
       this.gpuStress.init();
 
       this.gpuStress.onContextLost = () => {
-        this.log('GPU Context Lost! Performance throttled by OS or driver.', 'error');
-        this.updateThermalBadge('GPU CONTEXT RESET', 'throttling-heavy');
+        this.updateHealthBadge('🔴 GPU Safety Reset', 'hot', 'Graphics driver paused briefly to cool off');
+        this.log('GPU context briefly reset by system to prevent overheating.', 'warning');
       };
 
       this.gpuStress.onContextRestored = () => {
-        this.log('GPU Context Restored successfully.', 'success');
+        this.log('GPU graphics pipeline restored.', 'success');
       };
-
-      this.log('GPU WebGL pipeline initialized successfully.', 'success');
     } catch (e) {
-      this.log(`WebGL Init Error: ${e.message}`, 'error');
+      console.warn('WebGL init notice:', e.message);
     }
 
-    // 3. Initialize Chart
+    // 3. Initialize Chart in Advanced Settings
     const chartCanvas = document.getElementById('telemetryChart');
-    this.chart = new TelemetryChart(chartCanvas);
-    this.chart.resize();
-
-    window.addEventListener('resize', () => {
+    if (chartCanvas) {
+      this.chart = new TelemetryChart(chartCanvas);
       this.chart.resize();
-      if (this.gpuStress) this.gpuStress.updateViewportSize();
-    });
+      window.addEventListener('resize', () => {
+        this.chart.resize();
+        if (this.gpuStress) this.gpuStress.updateViewportSize();
+      });
+    }
 
-    // 4. Wire Metrics Callbacks
+    // 4. Connect Worker Metrics
     this.cpuManager.onMetricsUpdate = (metrics) => this.handleCpuMetrics(metrics);
     if (this.gpuStress) {
       this.gpuStress.onMetricsUpdate = (metrics) => this.handleGpuMetrics(metrics);
     }
 
-    // 5. Default UI Config
-    this.applyPreset('balanced');
-    this.updateControlsUI();
-    this.log(`System ready. Detected ${info.cpuCores} cores & ${info.gpuRenderer}.`, 'info');
+    // 5. Apply default intensity
+    this.applyIntensity('standard');
+    this.log(`Device ready: ${info.cpuCores} CPU cores & ${info.gpuRenderer}`, 'info');
   }
 
   initDOM() {
-    // Test Mode Buttons
-    document.querySelectorAll('.mode-btn').forEach(btn => {
+    // Step 1: Intensity Buttons
+    document.querySelectorAll('.intensity-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         if (this.isRunning) return;
-        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.intensity-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this.currentMode = btn.dataset.mode;
-        this.updateControlsUI();
+        this.selectedIntensity = btn.dataset.level;
+        this.applyIntensity(this.selectedIntensity);
       });
     });
 
-    // Preset Buttons
-    document.querySelectorAll('.preset-btn').forEach(btn => {
+    // Step 2: Duration Buttons
+    document.querySelectorAll('.duration-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         if (this.isRunning) return;
-        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.duration-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this.applyPreset(btn.dataset.preset);
+        this.selectedDuration = parseInt(btn.dataset.duration, 10);
+        this.updateTimerDisplay();
       });
     });
 
-    // Main Control Buttons
+    // Step 3: Big Start Button
     document.getElementById('startBtn').addEventListener('click', () => this.toggleStart());
-    document.getElementById('emergencyBtn').addEventListener('click', () => this.emergencyStop());
 
-    // Sliders & Selectors
+    // Fullscreen Viewport
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener('click', () => {
+        const wrapper = document.querySelector('.visualizer-wrapper');
+        if (!wrapper) return;
+        if (!document.fullscreenElement) {
+          wrapper.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen();
+        }
+      });
+    }
+
+    // Copy Results
+    const copyReportBtn = document.getElementById('copyReportBtn');
+    if (copyReportBtn) {
+      copyReportBtn.addEventListener('click', () => this.copyReport());
+    }
+
+    // Advanced Sliders (Optional Manual Overrides)
     const threadsSlider = document.getElementById('threadsSlider');
     const threadsVal = document.getElementById('threadsVal');
     const cores = navigator.hardwareConcurrency || 4;
@@ -142,76 +155,71 @@ class StressApp {
       if (this.gpuStress) this.gpuStress.setShaderMode(e.target.value);
     });
 
-    const stressIntensity = document.getElementById('stressIntensity');
-    if (stressIntensity) {
-      stressIntensity.addEventListener('change', (e) => {
-        if (this.gpuStress) this.gpuStress.setStressIntensity(e.target.value);
+    // Clear Logs
+    const clearLogBtn = document.getElementById('clearLogBtn');
+    if (clearLogBtn) {
+      clearLogBtn.addEventListener('click', () => {
+        document.getElementById('logContainer').innerHTML = '';
       });
     }
-
-    const durationSelect = document.getElementById('durationSelect');
-    durationSelect.addEventListener('change', (e) => {
-      this.testDurationSeconds = parseInt(e.target.value, 10);
-    });
-
-    // Fullscreen Viewport Toggle
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
-    if (fullscreenBtn) {
-      fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
-    }
-
-    // Copy Benchmark Result Button
-    const copyReportBtn = document.getElementById('copyReportBtn');
-    if (copyReportBtn) {
-      copyReportBtn.addEventListener('click', () => this.copyBenchmarkReport());
-    }
-
-    // Clear Logs
-    document.getElementById('clearLogBtn').addEventListener('click', () => {
-      document.getElementById('logContainer').innerHTML = '';
-    });
   }
 
-  applyPreset(presetName) {
+  renderDeviceBanner(info) {
+    const summaryEl = document.getElementById('quickDeviceSummary');
+    const cleanGpu = info.gpuRenderer.replace(/ANGLE \(|Direct3D.*|OpenGL.*|\)/g, '').trim();
+    summaryEl.textContent = `${info.os} • ${info.cpuCores} CPU Cores • ${cleanGpu || 'WebGL Graphics'}`;
+
+    if (info.battery.supported) {
+      const batPill = document.getElementById('batteryPill');
+      const batVal = document.getElementById('batteryVal');
+      const batIcon = document.getElementById('batteryIcon');
+      batPill.style.display = 'flex';
+      batVal.textContent = `${info.battery.level} (${info.battery.charging})`;
+      batIcon.textContent = info.battery.charging === 'Charging' ? '⚡' : '🔋';
+
+      this.deviceInfo.onBatteryChange = (bat) => {
+        batVal.textContent = `${bat.level} (${bat.charging})`;
+      };
+    }
+  }
+
+  applyIntensity(level) {
     const cores = navigator.hardwareConcurrency || 4;
     const threadsSlider = document.getElementById('threadsSlider');
     const threadsVal = document.getElementById('threadsVal');
     const loadSlider = document.getElementById('loadSlider');
     const loadVal = document.getElementById('loadVal');
     const resScale = document.getElementById('resScale');
-    const stressIntensity = document.getElementById('stressIntensity');
 
-    switch (presetName) {
-      case 'mobile':
+    switch (level) {
+      case 'gentle':
         threadsSlider.value = Math.max(1, Math.floor(cores / 2));
-        loadSlider.value = 60;
+        loadSlider.value = 50;
         resScale.value = '0.5';
-        if (stressIntensity) stressIntensity.value = 'light';
-        if (this.gpuStress) this.gpuStress.setStressIntensity('light');
+        if (this.gpuStress) {
+          this.gpuStress.setStressIntensity('light');
+          this.gpuStress.setResolutionScale(0.5);
+        }
         break;
 
-      case 'balanced':
+      case 'standard':
         threadsSlider.value = cores;
         loadSlider.value = 85;
         resScale.value = '1.0';
-        if (stressIntensity) stressIntensity.value = 'balanced';
-        if (this.gpuStress) this.gpuStress.setStressIntensity('balanced');
+        if (this.gpuStress) {
+          this.gpuStress.setStressIntensity('balanced');
+          this.gpuStress.setResolutionScale(1.0);
+        }
         break;
 
-      case 'extreme':
+      case 'maximum':
         threadsSlider.value = cores;
         loadSlider.value = 100;
         resScale.value = '1.5';
-        if (stressIntensity) stressIntensity.value = 'extreme';
-        if (this.gpuStress) this.gpuStress.setStressIntensity('extreme');
-        break;
-
-      case 'ultra':
-        threadsSlider.value = Math.min(32, cores * 2);
-        loadSlider.value = 100;
-        resScale.value = '2.0';
-        if (stressIntensity) stressIntensity.value = 'extreme';
-        if (this.gpuStress) this.gpuStress.setStressIntensity('extreme');
+        if (this.gpuStress) {
+          this.gpuStress.setStressIntensity('extreme');
+          this.gpuStress.setResolutionScale(1.5);
+        }
         break;
     }
 
@@ -219,44 +227,6 @@ class StressApp {
     loadVal.textContent = `${loadSlider.value}%`;
     this.cpuManager.setThreads(parseInt(threadsSlider.value, 10));
     this.cpuManager.setLoadPercentage(parseInt(loadSlider.value, 10));
-    if (this.gpuStress) this.gpuStress.setResolutionScale(parseFloat(resScale.value));
-
-    this.log(`Preset applied: [${presetName.toUpperCase()}].`, 'info');
-  }
-
-  renderDeviceInfo(info) {
-    document.getElementById('specCpuCores').textContent = `${info.cpuCores} Cores`;
-    document.getElementById('specGpuRenderer').textContent = info.gpuRenderer;
-    document.getElementById('specGpuVendor').textContent = info.gpuVendor;
-    document.getElementById('specPlatform').textContent = `${info.os} (${info.browser})`;
-    document.getElementById('specResolution').textContent = info.screenResolution;
-    document.getElementById('specMemory').textContent = info.deviceMemory;
-
-    if (info.battery.supported) {
-      document.getElementById('specBattery').textContent = `${info.battery.level} (${info.battery.charging})`;
-      this.deviceInfo.onBatteryChange = (bat) => {
-        document.getElementById('specBattery').textContent = `${bat.level} (${bat.charging})`;
-      };
-    } else {
-      document.getElementById('specBattery').textContent = 'Not Available';
-    }
-  }
-
-  updateControlsUI() {
-    const isCpuMode = this.currentMode === 'cpu';
-    const isGpuMode = this.currentMode === 'gpu';
-    const isBenchmark = this.currentMode === 'benchmark';
-
-    document.getElementById('cpuControls').style.opacity = isGpuMode ? '0.35' : '1';
-    document.getElementById('gpuControls').style.opacity = isCpuMode ? '0.35' : '1';
-
-    if (isBenchmark) {
-      document.getElementById('durationSelect').value = '60';
-      document.getElementById('durationSelect').disabled = true;
-      this.testDurationSeconds = 60;
-    } else {
-      document.getElementById('durationSelect').disabled = false;
-    }
   }
 
   toggleStart() {
@@ -273,105 +243,95 @@ class StressApp {
     this.scoreSamples = [];
     this.baselineOps = 0;
     this.baselineFps = 0;
-    this.warmupSamplesCount = 0;
+    this.warmupSamples = 0;
 
-    document.getElementById('startBtn').textContent = '⏹ STOP STRESS TEST';
-    document.getElementById('startBtn').classList.add('btn-danger');
-    document.getElementById('statusBadge').textContent = `RUNNING [${this.currentMode.toUpperCase()}]`;
-    document.getElementById('statusBadge').className = 'status-badge running';
+    const startBtn = document.getElementById('startBtn');
+    startBtn.textContent = '⏹ STOP TEST';
+    startBtn.classList.add('btn-danger');
+
+    const statusBadge = document.getElementById('statusBadge');
+    statusBadge.textContent = '⚡ Running Test...';
+    statusBadge.className = 'status-pill running';
+
     document.getElementById('benchmarkResultCard').style.display = 'none';
+    this.updateHealthBadge('🟢 Cool & Stable', 'cool', 'Performance running smoothly');
 
-    this.updateThermalBadge('STABLE / CALIBRATING', 'stable');
-    this.chart.clear();
+    if (this.chart) this.chart.clear();
 
-    const threads = parseInt(document.getElementById('threadsSlider').value, 10);
-    this.cpuManager.setThreads(threads);
-    this.cpuManager.setLoadPercentage(parseInt(document.getElementById('loadSlider').value, 10));
+    // Start Worker Compute
+    this.cpuManager.start();
 
-    // Start CPU Engine
-    if (this.currentMode === 'cpu' || this.currentMode === 'combined' || this.currentMode === 'benchmark') {
-      this.cpuManager.start();
-      this.log(`CPU Stress launched with ${threads} threads.`, 'info');
+    // Start WebGL 3D graphics
+    if (this.gpuStress) {
+      this.gpuStress.start();
     }
 
-    // Start GPU Engine
-    if (this.currentMode === 'gpu' || this.currentMode === 'combined' || this.currentMode === 'benchmark') {
-      if (this.gpuStress) {
-        this.gpuStress.setResolutionScale(parseFloat(document.getElementById('resScale').value));
-        this.gpuStress.setShaderMode(document.getElementById('shaderMode').value);
-        this.gpuStress.start();
-        this.log('GPU Stress WebGL render loop started.', 'info');
-      }
-    }
-
-    // Master 1-second interval
+    // 1-second master timer
     this.timerInterval = setInterval(() => {
       this.elapsedSeconds++;
       this.updateTimerDisplay();
 
-      // Check auto stop
-      if (this.testDurationSeconds > 0 && this.elapsedSeconds >= this.testDurationSeconds) {
-        this.log(`Completed targeted duration (${this.testDurationSeconds}s).`, 'success');
+      if (this.selectedDuration > 0 && this.elapsedSeconds >= this.selectedDuration) {
+        this.log(`Test completed targeted time (${this.selectedDuration}s).`, 'success');
         this.stop(true);
       }
     }, 1000);
 
-    // Telemetry & Thermal sampling loop (every 500ms)
+    // 500ms chart and health sampler
     this.chartInterval = setInterval(() => {
       const currentFps = this.gpuStress ? this.gpuStress.fps : 0;
       const currentMops = (this.cpuManager.currentOpsPerSec / 1000000);
-      this.chart.addPoint(currentFps, currentMops);
 
-      this.checkThermalThrottling(currentMops, currentFps);
+      if (this.chart) this.chart.addPoint(currentFps, currentMops);
+      this.checkThermalHealth(currentMops, currentFps);
 
-      if (this.currentMode === 'benchmark') {
-        this.scoreSamples.push({
-          fps: currentFps,
-          mops: currentMops
-        });
-      }
+      this.scoreSamples.push({ fps: currentFps, mops: currentMops });
     }, 500);
 
-    this.log(`Stress test started: [${this.currentMode.toUpperCase()}].`, 'warning');
+    this.log(`Started ${this.selectedIntensity.toUpperCase()} test.`, 'info');
   }
 
-  checkThermalThrottling(currentMops, currentFps) {
-    if (this.elapsedSeconds < 3) return; // Warm-up phase
+  checkThermalHealth(currentMops, currentFps) {
+    if (this.elapsedSeconds < 3) return;
 
-    if (this.warmupSamplesCount < 6) {
-      this.warmupSamplesCount++;
+    if (this.warmupSamples < 6) {
+      this.warmupSamples++;
       if (currentMops > this.baselineOps) this.baselineOps = currentMops;
       if (currentFps > this.baselineFps) this.baselineFps = currentFps;
       return;
     }
 
-    // Calculate performance decay compared to baseline
     let cpuDecay = 0;
-    if (this.baselineOps > 0 && (this.currentMode === 'cpu' || this.currentMode === 'combined')) {
+    if (this.baselineOps > 0) {
       cpuDecay = (this.baselineOps - currentMops) / this.baselineOps;
     }
 
     let gpuDecay = 0;
-    if (this.baselineFps > 0 && (this.currentMode === 'gpu' || this.currentMode === 'combined')) {
+    if (this.baselineFps > 0) {
       gpuDecay = (this.baselineFps - currentFps) / this.baselineFps;
     }
 
     const maxDecay = Math.max(cpuDecay, gpuDecay);
 
-    if (maxDecay >= 0.35) {
-      this.updateThermalBadge(`HEAVY THROTTLE (-${Math.round(maxDecay * 100)}%)`, 'throttling-heavy');
+    if (maxDecay >= 0.30) {
+      this.updateHealthBadge('🔴 Slowing Down (Warm)', 'hot', `Speed dropped by ${Math.round(maxDecay * 100)}% to protect hardware`);
     } else if (maxDecay >= 0.15) {
-      this.updateThermalBadge(`MILD THROTTLE (-${Math.round(maxDecay * 100)}%)`, 'throttling-mild');
+      this.updateHealthBadge('🟡 Getting Warm', 'warm', `Minor speed drop (${Math.round(maxDecay * 100)}%) as device heats up`);
     } else {
-      this.updateThermalBadge('THERMAL STABLE', 'stable');
+      this.updateHealthBadge('🟢 Cool & Stable', 'cool', 'Steady speed, no thermal throttling');
     }
   }
 
-  updateThermalBadge(text, className) {
-    const badge = document.getElementById('thermalBadge');
-    if (!badge) return;
-    badge.textContent = text;
-    badge.className = `thermal-badge ${className}`;
+  updateHealthBadge(text, typeClass, detail) {
+    const badge = document.getElementById('healthBadge');
+    const detailEl = document.getElementById('healthDetail');
+    if (badge) {
+      badge.textContent = text;
+      badge.className = `health-badge ${typeClass}`;
+    }
+    if (detailEl && detail) {
+      detailEl.textContent = detail;
+    }
   }
 
   stop(finishedNaturally = false) {
@@ -382,76 +342,69 @@ class StressApp {
     this.cpuManager.stop();
     if (this.gpuStress) this.gpuStress.stop();
 
-    document.getElementById('startBtn').textContent = '▶ START STRESS TEST';
-    document.getElementById('startBtn').classList.remove('btn-danger');
-    document.getElementById('statusBadge').textContent = 'IDLE';
-    document.getElementById('statusBadge').className = 'status-badge idle';
+    const startBtn = document.getElementById('startBtn');
+    startBtn.textContent = '▶ START SPEED TEST';
+    startBtn.classList.remove('btn-danger');
 
-    if (this.currentMode === 'benchmark' && (finishedNaturally || this.scoreSamples.length >= 10)) {
-      this.calculateBenchmarkScore();
+    const statusBadge = document.getElementById('statusBadge');
+    statusBadge.textContent = 'Test Finished';
+    statusBadge.className = 'status-pill idle';
+
+    document.getElementById('metricFpsState').textContent = 'Completed';
+    document.getElementById('metricCpuState').textContent = 'Completed';
+
+    if (finishedNaturally || this.scoreSamples.length >= 6) {
+      this.calculateFriendlyGrade();
     }
 
-    this.log('Stress test halted.', 'info');
-  }
-
-  emergencyStop() {
-    this.log('EMERGENCY THERMAL HALT TRIGGERED BY USER!', 'error');
-    this.stop(false);
-  }
-
-  toggleFullscreen() {
-    const canvasWrapper = document.querySelector('.canvas-wrapper-gpu');
-    if (!canvasWrapper) return;
-
-    if (!document.fullscreenElement) {
-      canvasWrapper.requestFullscreen().catch(err => {
-        console.error('Fullscreen request failed:', err);
-      });
-    } else {
-      document.exitFullscreen();
-    }
+    this.log('Test completed and stopped.', 'info');
   }
 
   updateTimerDisplay() {
-    const elapsedEl = document.getElementById('metricElapsed');
-    const remainingEl = document.getElementById('metricRemaining');
-
     const fmt = (s) => {
       const m = Math.floor(s / 60);
       const sec = s % 60;
       return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
     };
 
-    elapsedEl.textContent = fmt(this.elapsedSeconds);
+    document.getElementById('metricElapsed').textContent = fmt(this.elapsedSeconds);
 
-    if (this.testDurationSeconds > 0) {
-      const rem = Math.max(0, this.testDurationSeconds - this.elapsedSeconds);
+    const remainingEl = document.getElementById('metricRemaining');
+    if (this.selectedDuration > 0) {
+      const rem = Math.max(0, this.selectedDuration - this.elapsedSeconds);
       remainingEl.textContent = fmt(rem);
     } else {
-      remainingEl.textContent = '∞';
+      remainingEl.textContent = 'Continuous';
     }
   }
 
   handleCpuMetrics(metrics) {
     const now = performance.now();
-    if (now - this.lastUiUpdateTime < 150) return; // Smooth RAF limit
-    this.lastUiUpdateTime = now;
+    if (now - this.lastUiUpdate < 200) return;
+    this.lastUiUpdate = now;
 
-    const mops = (metrics.currentOpsPerSec / 1000000).toFixed(2);
-    document.getElementById('metricCpuOps').textContent = `${mops} M/s`;
-    document.getElementById('metricTotalOps').textContent = (metrics.totalCalculations).toLocaleString();
+    const mops = (metrics.currentOpsPerSec / 1000000).toFixed(1);
+    document.getElementById('metricCpuOps').textContent = mops;
+    document.getElementById('metricCpuState').textContent = `${(metrics.totalCalculations).toLocaleString()} calculations done`;
   }
 
   handleGpuMetrics(metrics) {
     document.getElementById('metricFps').textContent = metrics.fps;
-    document.getElementById('metricFrameTime').textContent = `${metrics.frameTimeMs} ms`;
-    document.getElementById('metricLowFps').textContent = metrics.low1PctFps;
+    const fpsState = document.getElementById('metricFpsState');
+    if (metrics.fps >= 55) {
+      fpsState.textContent = 'Super Smooth (60 FPS)';
+    } else if (metrics.fps >= 30) {
+      fpsState.textContent = 'Good Playable Speed';
+    } else {
+      fpsState.textContent = 'Reaching GPU Limit (Lagging)';
+    }
   }
 
-  calculateBenchmarkScore() {
+  calculateFriendlyGrade() {
     if (this.scoreSamples.length === 0) return;
 
-    const valid = this.scoreSamples.slice(Math.min(4, this.scoreSamples.length - 1));
+    // Discard warm-up
+    const valid = this.scoreSamples.slice(Math.min(3, this.scoreSamples.length - 1));
     const avgFps = valid.reduce((a, b) => a + b.fps, 0) / valid.length;
     const avgMops = valid.reduce((a, b) => a + b.mops, 0) / valid.length;
 
@@ -459,43 +412,72 @@ class StressApp {
     const gpuScore = Math.round(avgFps * 85);
     const totalScore = cpuScore + gpuScore;
 
-    document.getElementById('benchmarkResultCard').style.display = 'block';
+    // Determine Letter Grade & Friendly Description
+    let grade = 'A';
+    let title = 'Great Performance!';
+    let desc = 'Your device handles everyday tasks, web apps, and casual games with ease.';
+
+    if (totalScore >= 12000) {
+      grade = 'S';
+      title = 'Flagship Beast! 🚀';
+      desc = 'Super fast hardware! Easily crushes demanding 3D games and heavy creative workloads without breaking a sweat.';
+    } else if (totalScore >= 8000) {
+      grade = 'A+';
+      title = 'Excellent Speed & Gaming! ⚡';
+      desc = 'High-performance device with great cooling. Very smooth gaming, video editing, and multitasking.';
+    } else if (totalScore >= 5000) {
+      grade = 'A';
+      title = 'Great Everyday Speed! 👍';
+      desc = 'Solid all-around capability. Handles high-definition streaming, office work, and standard games smoothly.';
+    } else if (totalScore >= 2500) {
+      grade = 'B';
+      title = 'Good Standard Performance 👌';
+      desc = 'Capable device for web browsing, videos, and light applications.';
+    } else {
+      grade = 'C';
+      title = 'Entry-Level Device 📱';
+      desc = 'Basic speed. May experience slowdown or heat when running intensive 3D games.';
+    }
+
+    const card = document.getElementById('benchmarkResultCard');
+    card.style.display = 'flex';
+    document.getElementById('gradeLetter').textContent = grade;
+    document.getElementById('gradeTitle').textContent = title;
+    document.getElementById('gradeDesc').textContent = desc;
+
     document.getElementById('scoreTotal').textContent = totalScore.toLocaleString();
     document.getElementById('scoreCpu').textContent = cpuScore.toLocaleString();
     document.getElementById('scoreGpu').textContent = gpuScore.toLocaleString();
 
-    this.lastBenchmarkReport = {
+    this.lastReport = {
+      grade,
+      title,
       totalScore,
       cpuScore,
       gpuScore,
       avgFps: Math.round(avgFps),
-      avgMops: avgMops.toFixed(2),
-      cpuCores: this.deviceInfo.data.cpuCores,
-      gpuRenderer: this.deviceInfo.data.gpuRenderer,
-      os: this.deviceInfo.data.os
+      avgMops: avgMops.toFixed(1),
+      device: this.deviceInfo.data
     };
-
-    this.log(`Benchmark completed! Total Score: ${totalScore.toLocaleString()} (CPU: ${cpuScore}, GPU: ${gpuScore})`, 'success');
   }
 
-  copyBenchmarkReport() {
-    if (!this.lastBenchmarkReport) return;
-    const r = this.lastBenchmarkReport;
-    const text = `⚡ Browser Stress Test Benchmark Result\n` +
-      `-----------------------------------------\n` +
-      `🏆 Total Composite Score: ${r.totalScore.toLocaleString()}\n` +
-      `⚙️ CPU Score: ${r.cpuScore.toLocaleString()} (${r.avgMops} MOps/s | ${r.cpuCores} Cores)\n` +
-      `🎮 GPU Score: ${r.gpuScore.toLocaleString()} (${r.avgFps} FPS | ${r.gpuRenderer})\n` +
-      `📱 OS/Platform: ${r.os}\n` +
-      `🔗 Tested at: https://amitpadhan979.github.io/browser-stress-test/`;
+  copyReport() {
+    if (!this.lastReport) return;
+    const r = this.lastReport;
+    const text = `⚡ Device Performance Test Result\n` +
+      `-----------------------------------\n` +
+      `🏆 Grade: ${r.grade} (${r.title})\n` +
+      `⭐ Overall Score: ${r.totalScore.toLocaleString()}\n` +
+      `⚙️ Processor Score: ${r.cpuScore.toLocaleString()} (${r.avgMops} Mops/s)\n` +
+      `🎮 Graphics Score: ${r.gpuScore.toLocaleString()} (${r.avgFps} FPS)\n` +
+      `💻 Device: ${r.device.os} • ${r.device.cpuCores} Cores\n` +
+      `🔗 Test yours at: https://amitpadhan979.github.io/browser-stress-test/`;
 
     navigator.clipboard.writeText(text).then(() => {
       const btn = document.getElementById('copyReportBtn');
-      btn.textContent = '✓ COPIED TO CLIPBOARD!';
-      setTimeout(() => { btn.textContent = '📋 COPY REPORT'; }, 2500);
-    }).catch(err => {
-      console.error('Copy failed:', err);
-    });
+      btn.textContent = '✓ Copied to Clipboard!';
+      setTimeout(() => { btn.textContent = '📋 Copy Results to Clipboard'; }, 2500);
+    }).catch(() => {});
   }
 
   log(message, type = 'info') {
@@ -511,6 +493,6 @@ class StressApp {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  const app = new StressApp();
+  const app = new FriendlyStressApp();
   app.init();
 });
