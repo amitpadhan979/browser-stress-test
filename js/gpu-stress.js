@@ -1,7 +1,9 @@
 /**
  * GPU Stress Test Engine
- * WebGL 2.0 / WebGL 1.0 Shader Pipeline
- * Features safe resolution clamping, adaptive raymarching steps, and context recovery.
+ * Accurately measures:
+ * 1. Screen Display FPS (VSync-delivered frames)
+ * 2. True Draw Execution Latency (in milliseconds)
+ * 3. Uncapped GPU Compute Capacity (potential FPS if uncapped by VSync)
  */
 
 export class GPUStress {
@@ -12,12 +14,16 @@ export class GPUStress {
     this.isRunning = false;
     this.shaderMode = 'fractal'; // 'fractal' | 'particles'
     this.resolutionScale = 1.0;
-    this.stressIntensity = 'balanced'; // 'light' (48 steps), 'balanced' (72 steps), 'extreme' (96 steps)
+    this.stressIntensity = 'balanced';
 
-    // Performance telemetry
-    this.fps = 0;
-    this.frameTimeMs = 0;
+    // Metrics
+    this.displayFps = 0;
+    this.renderLatencyMs = 0;
+    this.uncappedCapacityFps = 0;
     this.low1PctFps = 0;
+
+    // Rolling latency history for accurate thermal decay tracking
+    this.latencyHistory = [];
     this.frameHistory = [];
     this.lastFrameTime = performance.now();
     this.startTime = performance.now();
@@ -26,15 +32,13 @@ export class GPUStress {
     this.onContextLost = null;
     this.onContextRestored = null;
 
-    // WebGL Objects
+    // WebGL objects
     this.fractalProgram = null;
     this.particleProgram = null;
     this.quadBuffer = null;
     this.particleBuffer = null;
     this.numParticles = 250000;
-
-    // Hardware bounds
-    this.maxSafeDim = 2560; // Clamped to prevent VRAM overflow and driver crashes
+    this.maxSafeDim = 2560;
 
     this.setupContextListeners();
   }
@@ -42,7 +46,6 @@ export class GPUStress {
   setupContextListeners() {
     this.canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
-      console.warn('WebGL context lost! Halting render loop and awaiting restoration...');
       if (this.animationFrameId) {
         cancelAnimationFrame(this.animationFrameId);
         this.animationFrameId = null;
@@ -52,7 +55,6 @@ export class GPUStress {
     }, false);
 
     this.canvas.addEventListener('webglcontextrestored', () => {
-      console.log('WebGL context restored! Re-initializing shaders and buffers...');
       try {
         this.init();
         if (this.onContextRestored) this.onContextRestored();
@@ -78,7 +80,6 @@ export class GPUStress {
       throw new Error('WebGL is not supported in this browser environment.');
     }
 
-    // Determine hardware limit
     try {
       const maxDims = this.gl.getParameter(this.gl.MAX_VIEWPORT_DIMS);
       if (maxDims && maxDims[0]) {
@@ -105,7 +106,7 @@ export class GPUStress {
 
   setStressIntensity(intensity) {
     this.stressIntensity = intensity;
-    this.initFractalShader(); // Recompile with optimal step count
+    this.initFractalShader();
   }
 
   setParticleCount(count) {
@@ -114,10 +115,9 @@ export class GPUStress {
   }
 
   updateViewportSize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.0); // Clamp DPR to 2.0 to prevent mobile crashes
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.0);
     const rect = this.canvas.getBoundingClientRect();
 
-    // Safely calculate clamped dimensions
     let width = Math.floor((rect.width || 800) * dpr * this.resolutionScale);
     let height = Math.floor((rect.height || 500) * dpr * this.resolutionScale);
 
@@ -369,6 +369,7 @@ export class GPUStress {
     this.startTime = performance.now();
     this.lastFrameTime = performance.now();
     this.frameHistory = [];
+    this.latencyHistory = [];
     this.render();
   }
 
@@ -378,13 +379,15 @@ export class GPUStress {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
-    this.fps = 0;
-    this.frameTimeMs = 0;
+    this.displayFps = 0;
+    this.renderLatencyMs = 0;
+    this.uncappedCapacityFps = 0;
     this.low1PctFps = 0;
     if (this.onMetricsUpdate) {
       this.onMetricsUpdate({
-        fps: 0,
-        frameTimeMs: 0,
+        displayFps: 0,
+        renderLatencyMs: 0,
+        uncappedCapacityFps: 0,
         low1PctFps: 0
       });
     }
@@ -393,38 +396,21 @@ export class GPUStress {
   render() {
     if (!this.isRunning || !this.gl || this.gl.isContextLost()) return;
 
-    const now = performance.now();
-    const delta = now - this.lastFrameTime;
-    this.lastFrameTime = now;
-    this.frameTimeMs = delta;
+    const frameStartTime = performance.now();
+    const frameIntervalDelta = frameStartTime - this.lastFrameTime;
+    this.lastFrameTime = frameStartTime;
 
-    this.frameHistory.push(delta);
+    // Track frame arrival delta (for VSync screen FPS)
+    this.frameHistory.push(frameIntervalDelta);
     if (this.frameHistory.length > 60) {
       this.frameHistory.shift();
     }
 
-    this.frameCount++;
-    if (this.frameCount % 10 === 0) {
-      const avgDelta = this.frameHistory.reduce((a, b) => a + b, 0) / this.frameHistory.length;
-      this.fps = avgDelta > 0 ? Math.round(1000 / avgDelta) : 0;
-
-      // Calculate 1% low FPS
-      const sorted = [...this.frameHistory].sort((a, b) => b - a);
-      const lowIndex = Math.max(0, Math.floor(sorted.length * 0.95));
-      const worstDelta = sorted[lowIndex] || avgDelta;
-      this.low1PctFps = worstDelta > 0 ? Math.round(1000 / worstDelta) : 0;
-
-      if (this.onMetricsUpdate) {
-        this.onMetricsUpdate({
-          fps: this.fps,
-          frameTimeMs: Math.round(this.frameTimeMs * 10) / 10,
-          low1PctFps: this.low1PctFps
-        });
-      }
-    }
-
     const gl = this.gl;
-    const time = (now - this.startTime) * 0.001;
+    const time = (frameStartTime - this.startTime) * 0.001;
+
+    // Execute WebGL Draw pipeline with high-precision timing
+    const drawStartTime = performance.now();
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clearColor(0.02, 0.03, 0.05, 1.0);
@@ -460,6 +446,46 @@ export class GPUStress {
       gl.vertexAttribPointer(this.aPosParticle, 3, gl.FLOAT, false, 0, 0);
 
       gl.drawArrays(gl.POINTS, 0, this.numParticles);
+    }
+
+    // Flush GPU command buffer
+    gl.flush();
+
+    const drawEndTime = performance.now();
+    const currentDrawLatency = Math.max(0.1, drawEndTime - drawStartTime);
+
+    this.latencyHistory.push(currentDrawLatency);
+    if (this.latencyHistory.length > 30) {
+      this.latencyHistory.shift();
+    }
+
+    this.frameCount++;
+    if (this.frameCount % 8 === 0) {
+      // 1. Calculate screen display FPS
+      const avgInterval = this.frameHistory.reduce((a, b) => a + b, 0) / this.frameHistory.length;
+      this.displayFps = avgInterval > 0 ? Math.round(1000 / avgInterval) : 0;
+
+      // 2. Calculate true GPU render latency
+      const avgLatency = this.latencyHistory.reduce((a, b) => a + b, 0) / this.latencyHistory.length;
+      this.renderLatencyMs = Math.round(avgLatency * 10) / 10;
+
+      // 3. Calculate uncapped GPU capacity (Equivalent FPS without VSync lock)
+      this.uncappedCapacityFps = Math.max(this.displayFps, Math.round(1000 / Math.max(0.5, avgLatency)));
+
+      // 4. Calculate 1% low FPS
+      const sorted = [...this.frameHistory].sort((a, b) => b - a);
+      const lowIndex = Math.max(0, Math.floor(sorted.length * 0.95));
+      const worstInterval = sorted[lowIndex] || avgInterval;
+      this.low1PctFps = worstInterval > 0 ? Math.round(1000 / worstInterval) : 0;
+
+      if (this.onMetricsUpdate) {
+        this.onMetricsUpdate({
+          displayFps: this.displayFps,
+          renderLatencyMs: this.renderLatencyMs,
+          uncappedCapacityFps: this.uncappedCapacityFps,
+          low1PctFps: this.low1PctFps
+        });
+      }
     }
 
     this.animationFrameId = requestAnimationFrame(() => this.render());

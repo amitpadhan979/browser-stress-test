@@ -1,7 +1,7 @@
 /**
- * Simple, User-Friendly Stress Test Coordinator
- * Maps plain-English choices (Gentle, Standard, Maximum) into engine workloads,
- * tracks thermal health, and produces friendly letter grades (S, A+, A, B, C).
+ * Accurate, User-Friendly Stress Test Coordinator
+ * Fixes VSync FPS capping, computes true GPU render latency & uncapped capacity,
+ * measures standardized GigaFLOPS, and detects genuine thermal degradation.
  */
 
 import { DeviceInfo } from './device-info.js';
@@ -9,14 +9,14 @@ import { CPUManager } from './cpu-manager.js';
 import { GPUStress } from './gpu-stress.js';
 import { TelemetryChart } from './chart.js';
 
-class FriendlyStressApp {
+class AccurateStressApp {
   constructor() {
     this.deviceInfo = new DeviceInfo();
     this.cpuManager = new CPUManager();
     this.gpuStress = null;
     this.chart = null;
 
-    // Simplified user settings
+    // User settings
     this.selectedIntensity = 'standard'; // 'gentle' | 'standard' | 'maximum'
     this.selectedDuration = 30; // seconds, 0 = continuous
     this.isRunning = false;
@@ -24,9 +24,9 @@ class FriendlyStressApp {
     this.timerInterval = null;
     this.chartInterval = null;
 
-    // Thermal & performance tracking
-    this.baselineOps = 0;
-    this.baselineFps = 0;
+    // Accurate thermal & performance tracking
+    this.baselineGflops = 0;
+    this.baselineLatencyMs = 999;
     this.warmupSamples = 0;
     this.scoreSamples = [];
     this.lastUiUpdate = 0;
@@ -35,11 +35,11 @@ class FriendlyStressApp {
   }
 
   async init() {
-    // 1. Probe Device
+    // 1. Probe Device specs with clean parsing & refresh rate
     const info = await this.deviceInfo.init();
     this.renderDeviceBanner(info);
 
-    // 2. Initialize 3D Graphics Viewport
+    // 2. Initialize GPU Graphics Engine
     const glCanvas = document.getElementById('gpuCanvas');
     try {
       this.gpuStress = new GPUStress(glCanvas);
@@ -47,7 +47,7 @@ class FriendlyStressApp {
 
       this.gpuStress.onContextLost = () => {
         this.updateHealthBadge('🔴 GPU Safety Reset', 'hot', 'Graphics driver paused briefly to cool off');
-        this.log('GPU context briefly reset by system to prevent overheating.', 'warning');
+        this.log('GPU context reset by system to prevent overheating.', 'warning');
       };
 
       this.gpuStress.onContextRestored = () => {
@@ -57,7 +57,7 @@ class FriendlyStressApp {
       console.warn('WebGL init notice:', e.message);
     }
 
-    // 3. Initialize Chart in Advanced Settings
+    // 3. Initialize Chart
     const chartCanvas = document.getElementById('telemetryChart');
     if (chartCanvas) {
       this.chart = new TelemetryChart(chartCanvas);
@@ -68,7 +68,7 @@ class FriendlyStressApp {
       });
     }
 
-    // 4. Connect Worker Metrics
+    // 4. Wire Metrics Callbacks
     this.cpuManager.onMetricsUpdate = (metrics) => this.handleCpuMetrics(metrics);
     if (this.gpuStress) {
       this.gpuStress.onMetricsUpdate = (metrics) => this.handleGpuMetrics(metrics);
@@ -76,7 +76,7 @@ class FriendlyStressApp {
 
     // 5. Apply default intensity
     this.applyIntensity('standard');
-    this.log(`Device ready: ${info.cpuCores} CPU cores & ${info.gpuRenderer}`, 'info');
+    this.log(`Ready: ${info.cpuThreads} CPU threads, ${info.cleanGpuModel}, ${info.displayHz}Hz display.`, 'info');
   }
 
   initDOM() {
@@ -166,8 +166,8 @@ class FriendlyStressApp {
 
   renderDeviceBanner(info) {
     const summaryEl = document.getElementById('quickDeviceSummary');
-    const cleanGpu = info.gpuRenderer.replace(/ANGLE \(|Direct3D.*|OpenGL.*|\)/g, '').trim();
-    summaryEl.textContent = `${info.os} • ${info.cpuCores} CPU Cores • ${cleanGpu || 'WebGL Graphics'}`;
+    const hzStr = info.displayHz ? ` • ${info.displayHz}Hz Display` : '';
+    summaryEl.textContent = `${info.os} • ${info.cpuThreads} CPU Threads • ${info.cleanGpuModel}${hzStr}`;
 
     if (info.battery.supported) {
       const batPill = document.getElementById('batteryPill');
@@ -241,8 +241,8 @@ class FriendlyStressApp {
     this.isRunning = true;
     this.elapsedSeconds = 0;
     this.scoreSamples = [];
-    this.baselineOps = 0;
-    this.baselineFps = 0;
+    this.baselineGflops = 0;
+    this.baselineLatencyMs = 999;
     this.warmupSamples = 0;
 
     const startBtn = document.getElementById('startBtn');
@@ -254,7 +254,7 @@ class FriendlyStressApp {
     statusBadge.className = 'status-pill running';
 
     document.getElementById('benchmarkResultCard').style.display = 'none';
-    this.updateHealthBadge('🟢 Cool & Stable', 'cool', 'Performance running smoothly');
+    this.updateHealthBadge('🟢 Cool & Stable', 'cool', 'Calibrating baseline temperature...');
 
     if (this.chart) this.chart.clear();
 
@@ -277,48 +277,60 @@ class FriendlyStressApp {
       }
     }, 1000);
 
-    // 500ms chart and health sampler
+    // 500ms chart and thermal health sampler
     this.chartInterval = setInterval(() => {
-      const currentFps = this.gpuStress ? this.gpuStress.fps : 0;
-      const currentMops = (this.cpuManager.currentOpsPerSec / 1000000);
+      const currentGflops = this.cpuManager.currentGflops || 0;
+      const currentLatency = this.gpuStress ? this.gpuStress.renderLatencyMs : 0;
+      const currentCapacityFps = this.gpuStress ? this.gpuStress.uncappedCapacityFps : 0;
+      const currentDisplayFps = this.gpuStress ? this.gpuStress.displayFps : 0;
 
-      if (this.chart) this.chart.addPoint(currentFps, currentMops);
-      this.checkThermalHealth(currentMops, currentFps);
+      if (this.chart) this.chart.addPoint(currentCapacityFps, currentGflops);
 
-      this.scoreSamples.push({ fps: currentFps, mops: currentMops });
+      this.checkThermalHealth(currentGflops, currentLatency);
+
+      this.scoreSamples.push({
+        displayFps: currentDisplayFps,
+        uncappedFps: currentCapacityFps,
+        renderLatencyMs: currentLatency,
+        gflops: currentGflops
+      });
     }, 500);
 
     this.log(`Started ${this.selectedIntensity.toUpperCase()} test.`, 'info');
   }
 
-  checkThermalHealth(currentMops, currentFps) {
+  checkThermalHealth(currentGflops, currentLatency) {
     if (this.elapsedSeconds < 3) return;
 
+    // Warm-up phase: capture peak cold baseline
     if (this.warmupSamples < 6) {
       this.warmupSamples++;
-      if (currentMops > this.baselineOps) this.baselineOps = currentMops;
-      if (currentFps > this.baselineFps) this.baselineFps = currentFps;
+      if (currentGflops > this.baselineGflops) this.baselineGflops = currentGflops;
+      if (currentLatency > 0 && currentLatency < this.baselineLatencyMs) this.baselineLatencyMs = currentLatency;
       return;
     }
 
-    let cpuDecay = 0;
-    if (this.baselineOps > 0) {
-      cpuDecay = (this.baselineOps - currentMops) / this.baselineOps;
+    // 1. Calculate GPU render latency degradation
+    let gpuThrottledRatio = 0;
+    if (this.baselineLatencyMs < 100 && currentLatency > 0) {
+      // If latency increased by > 30% from cold baseline, GPU is throttling
+      gpuThrottledRatio = (currentLatency - this.baselineLatencyMs) / this.baselineLatencyMs;
     }
 
-    let gpuDecay = 0;
-    if (this.baselineFps > 0) {
-      gpuDecay = (this.baselineFps - currentFps) / this.baselineFps;
+    // 2. Calculate CPU GFLOPS drop
+    let cpuDropRatio = 0;
+    if (this.baselineGflops > 0) {
+      cpuDropRatio = (this.baselineGflops - currentGflops) / this.baselineGflops;
     }
 
-    const maxDecay = Math.max(cpuDecay, gpuDecay);
+    const worstDrop = Math.max(gpuThrottledRatio, cpuDropRatio);
 
-    if (maxDecay >= 0.30) {
-      this.updateHealthBadge('🔴 Slowing Down (Warm)', 'hot', `Speed dropped by ${Math.round(maxDecay * 100)}% to protect hardware`);
-    } else if (maxDecay >= 0.15) {
-      this.updateHealthBadge('🟡 Getting Warm', 'warm', `Minor speed drop (${Math.round(maxDecay * 100)}%) as device heats up`);
+    if (worstDrop >= 0.35) {
+      this.updateHealthBadge('🔴 Thermal Throttling Active', 'hot', `Performance slowed by ~${Math.round(worstDrop * 100)}% due to heat accumulation`);
+    } else if (worstDrop >= 0.15) {
+      this.updateHealthBadge('🟡 Device Getting Warm', 'warm', `Minor speed reduction (~${Math.round(worstDrop * 100)}%) as thermals rise`);
     } else {
-      this.updateHealthBadge('🟢 Cool & Stable', 'cool', 'Steady speed, no thermal throttling');
+      this.updateHealthBadge('🟢 Cool & Stable', 'cool', `Steady frame times (~${currentLatency.toFixed(1)} ms), no thermal drop`);
     }
   }
 
@@ -350,11 +362,8 @@ class FriendlyStressApp {
     statusBadge.textContent = 'Test Finished';
     statusBadge.className = 'status-pill idle';
 
-    document.getElementById('metricFpsState').textContent = 'Completed';
-    document.getElementById('metricCpuState').textContent = 'Completed';
-
     if (finishedNaturally || this.scoreSamples.length >= 6) {
-      this.calculateFriendlyGrade();
+      this.calculateAccurateGrade();
     }
 
     this.log('Test completed and stopped.', 'info');
@@ -383,36 +392,45 @@ class FriendlyStressApp {
     if (now - this.lastUiUpdate < 200) return;
     this.lastUiUpdate = now;
 
-    const mops = (metrics.currentOpsPerSec / 1000000).toFixed(1);
-    document.getElementById('metricCpuOps').textContent = mops;
-    document.getElementById('metricCpuState').textContent = `${(metrics.totalCalculations).toLocaleString()} calculations done`;
+    const gflops = metrics.currentGflops.toFixed(2);
+    document.getElementById('metricCpuOps').textContent = gflops;
+
+    const totalBillions = (metrics.totalCumulativeFlops / 1e9).toFixed(1);
+    document.getElementById('metricCpuState').textContent = `${totalBillions} Billion total FLOPs calculated`;
   }
 
   handleGpuMetrics(metrics) {
-    document.getElementById('metricFps').textContent = metrics.fps;
+    document.getElementById('metricFps').textContent = metrics.displayFps;
     const fpsState = document.getElementById('metricFpsState');
-    if (metrics.fps >= 55) {
-      fpsState.textContent = 'Super Smooth (60 FPS)';
-    } else if (metrics.fps >= 30) {
-      fpsState.textContent = 'Good Playable Speed';
+
+    if (metrics.uncappedCapacityFps > metrics.displayFps + 5) {
+      fpsState.textContent = `${metrics.displayFps} FPS (VSync) • Capable of ~${metrics.uncappedCapacityFps} FPS (${metrics.renderLatencyMs} ms)`;
     } else {
-      fpsState.textContent = 'Reaching GPU Limit (Lagging)';
+      fpsState.textContent = `${metrics.displayFps} FPS (${metrics.renderLatencyMs} ms latency)`;
     }
   }
 
-  calculateFriendlyGrade() {
+  calculateAccurateGrade() {
     if (this.scoreSamples.length === 0) return;
 
-    // Discard warm-up
+    // Discard initial warm-up samples
     const valid = this.scoreSamples.slice(Math.min(3, this.scoreSamples.length - 1));
-    const avgFps = valid.reduce((a, b) => a + b.fps, 0) / valid.length;
-    const avgMops = valid.reduce((a, b) => a + b.mops, 0) / valid.length;
+    const avgUncappedFps = valid.reduce((a, b) => a + b.uncappedFps, 0) / valid.length;
+    const avgDisplayFps = valid.reduce((a, b) => a + b.displayFps, 0) / valid.length;
+    const avgLatency = valid.reduce((a, b) => a + b.renderLatencyMs, 0) / valid.length;
+    const avgGflops = valid.reduce((a, b) => a + b.gflops, 0) / valid.length;
 
-    const cpuScore = Math.round(avgMops * 150);
-    const gpuScore = Math.round(avgFps * 85);
+    // Accurate calibrated scoring:
+    // CPU score based on GFLOPS (Billion Floating Point Ops per sec)
+    const cpuScore = Math.round(avgGflops * 450);
+
+    // GPU score based on uncapped render capacity and resolution scale
+    const resMultiplier = (this.gpuStress ? this.gpuStress.resolutionScale : 1.0);
+    const gpuScore = Math.round(avgUncappedFps * 35 * Math.pow(resMultiplier, 0.5));
+
     const totalScore = cpuScore + gpuScore;
 
-    // Determine Letter Grade & Friendly Description
+    // Accurate Tiered Letter Grades
     let grade = 'A';
     let title = 'Great Performance!';
     let desc = 'Your device handles everyday tasks, web apps, and casual games with ease.';
@@ -420,23 +438,23 @@ class FriendlyStressApp {
     if (totalScore >= 12000) {
       grade = 'S';
       title = 'Flagship Beast! 🚀';
-      desc = 'Super fast hardware! Easily crushes demanding 3D games and heavy creative workloads without breaking a sweat.';
-    } else if (totalScore >= 8000) {
+      desc = `Outstanding performance! Capable of ~${Math.round(avgUncappedFps)} FPS rendering at ${avgLatency.toFixed(1)} ms latency and ${avgGflops.toFixed(1)} GFLOPS compute. Crushes heavy 3D games with ease.`;
+    } else if (totalScore >= 7500) {
       grade = 'A+';
-      title = 'Excellent Speed & Gaming! ⚡';
-      desc = 'High-performance device with great cooling. Very smooth gaming, video editing, and multitasking.';
-    } else if (totalScore >= 5000) {
+      title = 'High-End Speed & Gaming! ⚡';
+      desc = `Excellent speed with great thermal stability. Capable of ~${Math.round(avgUncappedFps)} FPS rendering (${avgLatency.toFixed(1)} ms latency) and ${avgGflops.toFixed(1)} GFLOPS compute.`;
+    } else if (totalScore >= 4500) {
       grade = 'A';
-      title = 'Great Everyday Speed! 👍';
-      desc = 'Solid all-around capability. Handles high-definition streaming, office work, and standard games smoothly.';
-    } else if (totalScore >= 2500) {
+      title = 'Great Everyday Performance 👍';
+      desc = `Solid capability across gaming and heavy apps. Delivers steady ${Math.round(avgDisplayFps)} FPS with ${avgGflops.toFixed(1)} GFLOPS processing power.`;
+    } else if (totalScore >= 2000) {
       grade = 'B';
       title = 'Good Standard Performance 👌';
-      desc = 'Capable device for web browsing, videos, and light applications.';
+      desc = `Comfortable for web browsing, video streaming, and light 3D games (${Math.round(avgDisplayFps)} FPS, ${avgGflops.toFixed(1)} GFLOPS).`;
     } else {
       grade = 'C';
       title = 'Entry-Level Device 📱';
-      desc = 'Basic speed. May experience slowdown or heat when running intensive 3D games.';
+      desc = `Basic speed (${Math.round(avgDisplayFps)} FPS). May experience thermal slowdown in heavy 3D titles.`;
     }
 
     const card = document.getElementById('benchmarkResultCard');
@@ -455,8 +473,10 @@ class FriendlyStressApp {
       totalScore,
       cpuScore,
       gpuScore,
-      avgFps: Math.round(avgFps),
-      avgMops: avgMops.toFixed(1),
+      displayFps: Math.round(avgDisplayFps),
+      uncappedFps: Math.round(avgUncappedFps),
+      renderLatencyMs: avgLatency.toFixed(1),
+      gflops: avgGflops.toFixed(2),
       device: this.deviceInfo.data
     };
   }
@@ -468,9 +488,9 @@ class FriendlyStressApp {
       `-----------------------------------\n` +
       `🏆 Grade: ${r.grade} (${r.title})\n` +
       `⭐ Overall Score: ${r.totalScore.toLocaleString()}\n` +
-      `⚙️ Processor Score: ${r.cpuScore.toLocaleString()} (${r.avgMops} Mops/s)\n` +
-      `🎮 Graphics Score: ${r.gpuScore.toLocaleString()} (${r.avgFps} FPS)\n` +
-      `💻 Device: ${r.device.os} • ${r.device.cpuCores} Cores\n` +
+      `⚙️ CPU Compute: ${r.cpuScore.toLocaleString()} (${r.gflops} GFLOPS • ${r.device.cpuThreads} Threads)\n` +
+      `🎮 GPU Graphics: ${r.gpuScore.toLocaleString()} (~${r.uncappedFps} Uncapped FPS • ${r.renderLatencyMs} ms latency • ${r.device.cleanGpuModel})\n` +
+      `🖥️ Display: ${r.device.displayHz}Hz • ${r.device.os}\n` +
       `🔗 Test yours at: https://amitpadhan979.github.io/browser-stress-test/`;
 
     navigator.clipboard.writeText(text).then(() => {
@@ -493,6 +513,6 @@ class FriendlyStressApp {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  const app = new FriendlyStressApp();
+  const app = new AccurateStressApp();
   app.init();
 });

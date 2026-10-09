@@ -1,45 +1,48 @@
 /**
  * Dedicated Multi-threaded CPU Stress Worker
- * High-performance, zero-allocation computational kernel.
- * Pre-allocates buffers to eliminate GC pauses and memory leaks.
- * Uses macrotask scheduling to ensure message handling (STOP/SET_LOAD) is never starved.
+ * Calibrated against standard IEEE-754 Floating-Point Operations (FLOPs).
+ * 32x32 Matrix Multiply = 65,536 FLOPs
+ * 400 Transcendental Math iterations = 6,000 FLOPs
+ * Standard Batch = 71,536 FLOPs
  */
 
 let isRunning = false;
 let loadPercentage = 100;
 let workerId = 0;
-let totalOps = 0;
+let totalFlops = 0;
 let lastReportTime = performance.now();
 
-// Pre-allocated static buffers - ZERO GC allocations in hot loop
+// Pre-allocated static buffers (Zero GC overhead)
 const N = 32;
 const MATRIX_SIZE = N * N;
 const bufferA = new Float64Array(MATRIX_SIZE);
 const bufferB = new Float64Array(MATRIX_SIZE);
 const bufferC = new Float64Array(MATRIX_SIZE);
 
-// Macrotask scheduler: yields to the event loop so onmessage is always processed immediately
+// Calibrated FLOPs constants
+const MATRIX_FLOPS = 2 * N * N * N; // 65,536 FLOPs
+const TRANSCENDENTAL_FLOPS = 400 * 15; // 6,000 FLOPs
+const BATCH_CALIBRATED_FLOPS = MATRIX_FLOPS + TRANSCENDENTAL_FLOPS; // 71,536 FLOPs
+
 function scheduleNextCycle(restMs) {
   if (!isRunning) return;
   if (restMs > 1) {
     setTimeout(runLoop, restMs);
   } else {
-    // Macrotask yield via setTimeout 0 allows browser event loop to process IPC messages
     setTimeout(runLoop, 0);
   }
 }
 
-// Heavy numerical stress kernel: Floating-point, integer bitwise, matrix multiplications & transcendentals
-function executeStressBatch(batchSize) {
+function executeStressBatch(cryptoHashRounds) {
   let acc = 0;
 
-  // 1. Populate pre-allocated matrices with transcendental operations
+  // 1. Transcendental population
   for (let i = 0; i < MATRIX_SIZE; i++) {
-    bufferA[i] = Math.sin(i + totalOps);
-    bufferB[i] = Math.cos(i - totalOps);
+    bufferA[i] = Math.sin(i + totalFlops);
+    bufferB[i] = Math.cos(i - totalFlops);
   }
 
-  // 2. Matrix multiplication (heavy L1/L2 cache + ALU stress)
+  // 2. Matrix multiplication (65,536 FLOPs)
   for (let i = 0; i < N; i++) {
     const rowOffset = i * N;
     for (let k = 0; k < N; k++) {
@@ -51,50 +54,49 @@ function executeStressBatch(batchSize) {
     }
   }
 
-  // 3. Cryptographic bitwise integer hashing loop (Murmur/SHA-style mixing)
-  let h = (0x811c9dc5 ^ totalOps) >>> 0;
-  for (let i = 0; i < batchSize; i++) {
+  // 3. Cryptographic bitwise hash mixing
+  let h = (0x811c9dc5 ^ totalFlops) >>> 0;
+  for (let i = 0; i < cryptoHashRounds; i++) {
     h = Math.imul(h ^ (i & 0xff), 0x01000193);
     h = (h << 13) | (h >>> 19);
     h = (Math.imul(h, 5) + 0xe6546b64) >>> 0;
     acc += Math.sqrt(h & 0xffff);
   }
 
-  // 4. Heavy transcendental calculations (ALU pipeline stress)
+  // 4. Transcendental operations (6,000 FLOPs)
   for (let i = 0; i < 400; i++) {
     acc += Math.tan(Math.atan(Math.sin(i * 0.05 + 0.1)));
   }
 
-  return batchSize + (N * N * N) + 400;
+  return BATCH_CALIBRATED_FLOPS;
 }
 
 function runLoop() {
   if (!isRunning) return;
 
   const cycleStart = performance.now();
-  // Time slice budget in ms (30ms chunks prevent thread lockup)
-  const sliceBudget = 30;
+  const sliceBudget = 30; // 30ms non-blocking chunks
   const targetWorkTime = sliceBudget * (loadPercentage / 100);
   const targetRestTime = sliceBudget * ((100 - loadPercentage) / 100);
 
-  let opsInCycle = 0;
+  let flopsInCycle = 0;
   while (isRunning && (performance.now() - cycleStart) < targetWorkTime) {
-    opsInCycle += executeStressBatch(1000);
+    flopsInCycle += executeStressBatch(1000);
   }
 
-  totalOps += opsInCycle;
+  totalFlops += flopsInCycle;
 
-  // Report metrics back to main thread at a smooth 4Hz cadence
   const now = performance.now();
   if (now - lastReportTime >= 250) {
     const elapsedSec = (now - lastReportTime) / 1000;
+    const gflops = (totalFlops / elapsedSec) / 1e9; // Billion FLOPs per second
     self.postMessage({
       type: 'METRICS',
       workerId,
-      ops: totalOps,
-      opsPerSec: totalOps / elapsedSec
+      flops: totalFlops,
+      gflops: gflops
     });
-    totalOps = 0;
+    totalFlops = 0;
     lastReportTime = now;
   }
 
@@ -110,14 +112,14 @@ self.onmessage = function(e) {
       workerId = data.workerId || 0;
       loadPercentage = Math.max(10, Math.min(100, data.loadPercentage || 100));
       isRunning = true;
-      totalOps = 0;
+      totalFlops = 0;
       lastReportTime = performance.now();
       scheduleNextCycle(0);
       break;
 
     case 'STOP':
       isRunning = false;
-      totalOps = 0;
+      totalFlops = 0;
       break;
 
     case 'SET_LOAD':

@@ -1,6 +1,6 @@
 /**
  * CPU Stress Test Manager
- * Coordinates multi-threaded worker pool with smooth main-thread IPC aggregation.
+ * Accurately aggregates GigaFLOPS (Billion Floating-Point Ops/sec) across all threads.
  */
 
 export class CPUManager {
@@ -9,9 +9,9 @@ export class CPUManager {
     this.numThreads = navigator.hardwareConcurrency || 4;
     this.loadPercentage = 100;
     this.isRunning = false;
-    this.totalCalculations = 0;
-    this.currentOpsPerSec = 0;
-    this.workerOpsMap = new Map();
+    this.totalCumulativeFlops = 0;
+    this.currentGflops = 0;
+    this.workerGflopsMap = new Map();
     this.onMetricsUpdate = null;
     this.workerScriptUrl = 'js/cpu-worker.js';
   }
@@ -33,9 +33,9 @@ export class CPUManager {
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.totalCalculations = 0;
-    this.currentOpsPerSec = 0;
-    this.workerOpsMap.clear();
+    this.totalCumulativeFlops = 0;
+    this.currentGflops = 0;
+    this.workerGflopsMap.clear();
 
     for (let i = 0; i < this.numThreads; i++) {
       try {
@@ -67,20 +67,20 @@ export class CPUManager {
 
   handleWorkerMetrics(data) {
     if (!this.isRunning) return;
-    this.totalCalculations += data.ops;
-    this.workerOpsMap.set(data.workerId, data.opsPerSec);
+    this.totalCumulativeFlops += data.flops;
+    this.workerGflopsMap.set(data.workerId, data.gflops);
 
-    // Sum ops per second across active workers
-    let sumOps = 0;
-    for (const ops of this.workerOpsMap.values()) {
-      sumOps += ops;
+    // Sum GigaFLOPS across active workers
+    let sumGflops = 0;
+    for (const gflops of this.workerGflopsMap.values()) {
+      sumGflops += gflops;
     }
-    this.currentOpsPerSec = sumOps;
+    this.currentGflops = Math.round(sumGflops * 100) / 100;
 
     if (this.onMetricsUpdate) {
       this.onMetricsUpdate({
-        currentOpsPerSec: this.currentOpsPerSec,
-        totalCalculations: this.totalCalculations,
+        currentGflops: this.currentGflops,
+        totalCumulativeFlops: this.totalCumulativeFlops,
         activeThreads: this.workers.length
       });
     }
@@ -95,13 +95,13 @@ export class CPUManager {
       } catch (e) {}
     });
     this.workers = [];
-    this.currentOpsPerSec = 0;
-    this.workerOpsMap.clear();
+    this.currentGflops = 0;
+    this.workerGflopsMap.clear();
 
     if (this.onMetricsUpdate) {
       this.onMetricsUpdate({
-        currentOpsPerSec: 0,
-        totalCalculations: this.totalCalculations,
+        currentGflops: 0,
+        totalCumulativeFlops: this.totalCumulativeFlops,
         activeThreads: 0
       });
     }
