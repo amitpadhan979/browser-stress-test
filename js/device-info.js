@@ -1,7 +1,7 @@
 /**
  * Device & Hardware Telemetry Probe
- * Accurately extracts clean GPU model, CPU logical threads, display refresh rate (Hz),
- * memory with privacy notes, and battery status.
+ * Probes WebGL2 and WebGPU for multi-adapter detection (iGPU vs dGPU).
+ * Classifies whether the active renderer is an Integrated or Dedicated GPU.
  */
 
 export class DeviceInfo {
@@ -12,6 +12,10 @@ export class DeviceInfo {
       gpuRenderer: 'Detecting...',
       cleanGpuModel: 'Detecting...',
       cleanVendor: 'Detecting...',
+      gpuType: 'Detecting...', // 'dGPU' | 'iGPU' | 'Unified SoC' | 'Software'
+      isDedicated: false,
+      hasDualGpus: false,
+      adaptersList: [],
       displayHz: 60,
       deviceType: this.detectDeviceType(),
       deviceMemory: navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'Not exposed by browser',
@@ -30,11 +34,13 @@ export class DeviceInfo {
   }
 
   async init() {
-    this.detectGPU();
+    this.detectWebGL();
     await Promise.all([
+      this.detectWebGPUAdapters(),
       this.detectRefreshRate(),
       this.detectBattery()
     ]);
+    this.classifyGpuType();
     return this.data;
   }
 
@@ -70,11 +76,11 @@ export class DeviceInfo {
     return 'Modern Browser';
   }
 
-  detectGPU() {
+  detectWebGL(powerPreference = 'high-performance') {
     try {
       const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl2', { powerPreference: 'high-performance' }) ||
-                 canvas.getContext('webgl', { powerPreference: 'high-performance' });
+      const gl = canvas.getContext('webgl2', { powerPreference }) ||
+                 canvas.getContext('webgl', { powerPreference });
 
       if (gl) {
         this.data.webglVersion = gl instanceof WebGL2RenderingContext ? 'WebGL 2.0' : 'WebGL 1.0';
@@ -99,16 +105,13 @@ export class DeviceInfo {
         else if (/intel/i.test(rawVendor) || /intel/i.test(rawRenderer)) vendor = 'Intel';
         else if (/qualcomm|adreno/i.test(rawVendor) || /qualcomm|adreno/i.test(rawRenderer)) vendor = 'Qualcomm Adreno';
         else if (/arm|mali/i.test(rawVendor) || /arm|mali/i.test(rawRenderer)) vendor = 'ARM Mali';
-        else if (/google|swiftshader/i.test(rawRenderer)) vendor = 'Google SwiftShader (CPU Emulation)';
+        else if (/google|swiftshader/i.test(rawRenderer)) vendor = 'Google SwiftShader';
         this.data.cleanVendor = vendor;
 
-        // Extract clean GPU model
+        // Clean GPU model
         let clean = rawRenderer;
-        // Strip ANGLE wrapper
         clean = clean.replace(/ANGLE \([^,]+,\s*/i, '');
-        // Strip driver versions and vs/ps profiles
         clean = clean.replace(/Direct3D[0-9]+.*|vs_[0-9]+_[0-9]+.*|OpenGL.*|\(TM\)|\(R\)/gi, '');
-        // Strip trailing punctuation
         clean = clean.replace(/[,\)]+$/g, '').trim();
 
         if (!clean || clean.length < 3) {
@@ -116,20 +119,80 @@ export class DeviceInfo {
         }
 
         this.data.cleanGpuModel = clean;
-      } else {
-        this.data.gpuVendor = 'Disabled';
-        this.data.gpuRenderer = 'Software / Not Available';
-        this.data.cleanGpuModel = 'WebGL Not Supported';
-        this.data.cleanVendor = 'Standard';
-        this.data.webglVersion = 'None';
       }
     } catch (e) {
       this.data.cleanGpuModel = 'Standard Graphics Processor';
-      this.data.cleanVendor = 'Standard';
     }
   }
 
-  // Measures true monitor refresh rate (60Hz, 75Hz, 120Hz, 144Hz, etc.)
+  async detectWebGPUAdapters() {
+    if (!('gpu' in navigator)) return;
+
+    try {
+      // 1. Probe High-Performance Adapter (Typically Dedicated GPU)
+      const highPerfAdapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+      // 2. Probe Low-Power Adapter (Typically Integrated GPU)
+      const lowPowerAdapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+
+      const adapters = [];
+
+      if (highPerfAdapter) {
+        let name = 'High-Performance GPU Adapter';
+        if (highPerfAdapter.info) {
+          name = `${highPerfAdapter.info.vendor || ''} ${highPerfAdapter.info.device || ''} ${highPerfAdapter.info.architecture || ''}`.trim() || name;
+        }
+        adapters.push({ type: 'dGPU', name, adapter: highPerfAdapter });
+      }
+
+      if (lowPowerAdapter && lowPowerAdapter !== highPerfAdapter) {
+        let name = 'Low-Power GPU Adapter (iGPU)';
+        if (lowPowerAdapter.info) {
+          name = `${lowPowerAdapter.info.vendor || ''} ${lowPowerAdapter.info.device || ''}`.trim() || name;
+        }
+        adapters.push({ type: 'iGPU', name, adapter: lowPowerAdapter });
+        this.data.hasDualGpus = true;
+      }
+
+      this.data.adaptersList = adapters;
+    } catch (e) {
+      // WebGPU not supported or restricted
+    }
+  }
+
+  classifyGpuType() {
+    const raw = `${this.data.gpuVendor} ${this.data.gpuRenderer} ${this.data.cleanGpuModel}`.toLowerCase();
+
+    // Dedicated GPUs
+    if (/geforce|rtx|gtx|quadro|titan|radeon rx|radeon pro|intel arc/i.test(raw)) {
+      this.data.gpuType = 'dGPU (Dedicated High-Performance)';
+      this.data.isDedicated = true;
+    }
+    // Apple Silicon Unified GPU
+    else if (/apple m[0-9]/i.test(raw) || (/apple/i.test(raw) && !/ios/i.test(this.data.os))) {
+      this.data.gpuType = 'Unified SoC GPU (Apple Silicon)';
+      this.data.isDedicated = true;
+    }
+    // Mobile SoCs
+    else if (/adreno|mali|bionic|snapdragon|dimensity|tensor/i.test(raw)) {
+      this.data.gpuType = 'Mobile Integrated GPU';
+      this.data.isDedicated = false;
+    }
+    // Intel / AMD Integrated GPUs
+    else if (/intel.*(hd|uhd|iris|graphics)|amd.*radeon\(tm\)|vega|radeon graphics/i.test(raw)) {
+      this.data.gpuType = 'iGPU (Integrated Power-Saving)';
+      this.data.isDedicated = false;
+    }
+    // SwiftShader / Software emulation
+    else if (/swiftshader|llvmpipe|software/i.test(raw)) {
+      this.data.gpuType = 'Software Emulated GPU';
+      this.data.isDedicated = false;
+    }
+    else {
+      this.data.gpuType = this.data.cleanVendor === 'NVIDIA' || this.data.cleanVendor === 'AMD' ? 'dGPU (Dedicated)' : 'Standard GPU';
+      this.data.isDedicated = this.data.gpuType.includes('dGPU');
+    }
+  }
+
   detectRefreshRate() {
     return new Promise((resolve) => {
       let frameCount = 0;
@@ -154,7 +217,6 @@ export class DeviceInfo {
             const avgDelta = samples.reduce((a, b) => a + b, 0) / samples.length;
             const hz = Math.round(1000 / avgDelta);
 
-            // Snap to common refresh rates to filter out micro-jitter
             if (Math.abs(hz - 60) <= 4) this.data.displayHz = 60;
             else if (Math.abs(hz - 75) <= 4) this.data.displayHz = 75;
             else if (Math.abs(hz - 90) <= 4) this.data.displayHz = 90;

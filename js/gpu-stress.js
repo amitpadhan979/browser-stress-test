@@ -4,6 +4,7 @@
  * 1. Screen Display FPS (VSync-delivered frames)
  * 2. True Draw Execution Latency (in milliseconds)
  * 3. Uncapped GPU Compute Capacity (potential FPS if uncapped by VSync)
+ * Supports dynamic re-creation with high-performance dGPU preference.
  */
 
 export class GPUStress {
@@ -15,6 +16,7 @@ export class GPUStress {
     this.shaderMode = 'fractal'; // 'fractal' | 'particles'
     this.resolutionScale = 1.0;
     this.stressIntensity = 'balanced';
+    this.currentPowerPreference = 'high-performance';
 
     // Metrics
     this.displayFps = 0;
@@ -22,7 +24,7 @@ export class GPUStress {
     this.uncappedCapacityFps = 0;
     this.low1PctFps = 0;
 
-    // Rolling latency history for accurate thermal decay tracking
+    // Rolling latency history
     this.latencyHistory = [];
     this.frameHistory = [];
     this.lastFrameTime = performance.now();
@@ -56,7 +58,7 @@ export class GPUStress {
 
     this.canvas.addEventListener('webglcontextrestored', () => {
       try {
-        this.init();
+        this.init(this.currentPowerPreference);
         if (this.onContextRestored) this.onContextRestored();
       } catch (err) {
         console.error('Failed to restore WebGL context:', err);
@@ -64,14 +66,16 @@ export class GPUStress {
     }, false);
   }
 
-  init() {
+  init(powerPreference = 'high-performance') {
+    this.currentPowerPreference = powerPreference;
+
     this.gl = this.canvas.getContext('webgl2', {
-      powerPreference: 'high-performance',
+      powerPreference: this.currentPowerPreference,
       desynchronized: true,
       antialias: false,
       preserveDrawingBuffer: false
     }) || this.canvas.getContext('webgl', {
-      powerPreference: 'high-performance',
+      powerPreference: this.currentPowerPreference,
       antialias: false,
       preserveDrawingBuffer: false
     });
@@ -93,6 +97,30 @@ export class GPUStress {
     this.initFractalShader();
     this.initParticleShader();
     this.updateViewportSize();
+  }
+
+  recreateContext(powerPreference = 'high-performance') {
+    const wasRunning = this.isRunning;
+    if (wasRunning) this.stop();
+
+    // Clean up existing programs
+    if (this.gl) {
+      try {
+        if (this.fractalProgram) this.gl.deleteProgram(this.fractalProgram);
+        if (this.particleProgram) this.gl.deleteProgram(this.particleProgram);
+        if (this.quadBuffer) this.gl.deleteBuffer(this.quadBuffer);
+        if (this.particleBuffer) this.gl.deleteBuffer(this.particleBuffer);
+      } catch (e) {}
+    }
+
+    this.fractalProgram = null;
+    this.particleProgram = null;
+    this.quadBuffer = null;
+    this.particleBuffer = null;
+
+    this.init(powerPreference);
+
+    if (wasRunning) this.start();
   }
 
   setResolutionScale(scale) {
@@ -400,7 +428,6 @@ export class GPUStress {
     const frameIntervalDelta = frameStartTime - this.lastFrameTime;
     this.lastFrameTime = frameStartTime;
 
-    // Track frame arrival delta (for VSync screen FPS)
     this.frameHistory.push(frameIntervalDelta);
     if (this.frameHistory.length > 60) {
       this.frameHistory.shift();
@@ -409,7 +436,6 @@ export class GPUStress {
     const gl = this.gl;
     const time = (frameStartTime - this.startTime) * 0.001;
 
-    // Execute WebGL Draw pipeline with high-precision timing
     const drawStartTime = performance.now();
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -448,7 +474,6 @@ export class GPUStress {
       gl.drawArrays(gl.POINTS, 0, this.numParticles);
     }
 
-    // Flush GPU command buffer
     gl.flush();
 
     const drawEndTime = performance.now();
@@ -461,18 +486,14 @@ export class GPUStress {
 
     this.frameCount++;
     if (this.frameCount % 8 === 0) {
-      // 1. Calculate screen display FPS
       const avgInterval = this.frameHistory.reduce((a, b) => a + b, 0) / this.frameHistory.length;
       this.displayFps = avgInterval > 0 ? Math.round(1000 / avgInterval) : 0;
 
-      // 2. Calculate true GPU render latency
       const avgLatency = this.latencyHistory.reduce((a, b) => a + b, 0) / this.latencyHistory.length;
       this.renderLatencyMs = Math.round(avgLatency * 10) / 10;
 
-      // 3. Calculate uncapped GPU capacity (Equivalent FPS without VSync lock)
       this.uncappedCapacityFps = Math.max(this.displayFps, Math.round(1000 / Math.max(0.5, avgLatency)));
 
-      // 4. Calculate 1% low FPS
       const sorted = [...this.frameHistory].sort((a, b) => b - a);
       const lowIndex = Math.max(0, Math.floor(sorted.length * 0.95));
       const worstInterval = sorted[lowIndex] || avgInterval;

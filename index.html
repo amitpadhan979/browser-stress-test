@@ -35,8 +35,12 @@
         <span class="device-banner-label">Your Detected Device</span>
         <div class="device-banner-specs" id="quickDeviceSummary">Detecting your device specifications...</div>
       </div>
-      <div class="battery-pill" id="batteryPill" style="display: none;">
-        <span id="batteryIcon">🔋</span> <span id="batteryVal">--%</span>
+      <div class="banner-actions">
+        <span id="gpuTypeBadge" class="gpu-badge">Detecting...</span>
+        <button id="dgpuRequestBtn" class="btn-dgpu" title="Ask for High-Performance Dedicated GPU">🎮 Request dGPU</button>
+        <div class="battery-pill" id="batteryPill" style="display: none;">
+          <span id="batteryIcon">🔋</span> <span id="batteryVal">--%</span>
+        </div>
       </div>
     </section>
 
@@ -260,6 +264,89 @@
     </details>
 
   </main>
+
+  <!-- Dedicated GPU (dGPU) Permission & Switching Modal -->
+  <div id="dgpuModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-row">
+          <span class="modal-icon">🎮</span>
+          <div>
+            <h3>Dedicated GPU (dGPU) Permission</h3>
+            <p class="modal-subtitle">Request high-performance graphics processor on laptops & dual-GPU systems</p>
+          </div>
+        </div>
+        <button id="closeModalBtn" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Current Status Box -->
+        <div class="modal-status-box">
+          <div class="status-row">
+            <span class="status-label">Currently Active GPU:</span>
+            <strong id="modalActiveGpu">Detecting...</strong>
+          </div>
+          <div class="status-row">
+            <span class="status-label">GPU Classification:</span>
+            <span id="modalGpuType" class="gpu-badge">Detecting...</span>
+          </div>
+          <div class="status-row" id="modalAdaptersRow">
+            <span class="status-label">Detected Hardware Adapters:</span>
+            <ul id="modalAdaptersList" class="adapters-list"></ul>
+          </div>
+        </div>
+
+        <!-- 1-Click Switch Button -->
+        <div class="modal-action-row">
+          <button id="recreateDgpuBtn" class="btn-modal-primary">⚡ Request High-Performance dGPU Mode</button>
+          <span class="action-note">Requests browser WebGL2/WebGPU context with <code>powerPreference: 'high-performance'</code></span>
+        </div>
+
+        <!-- OS Bypass Guide Accordion -->
+        <div class="modal-guide-section">
+          <h4>💡 Still using Integrated GPU (iGPU)?</h4>
+          <p class="guide-intro">By default, Windows and macOS force web browsers onto power-saving integrated graphics to save battery. To unlock your dedicated NVIDIA or AMD graphics card for browser tests:</p>
+          
+          <div class="os-guides">
+            <!-- Windows Guide -->
+            <div class="os-guide-item">
+              <span class="os-guide-title">🪟 Windows 11 / 10 (NVIDIA / AMD)</span>
+              <ol class="guide-steps">
+                <li>Open <strong>Windows Settings</strong> &gt; <strong>System</strong> &gt; <strong>Display</strong> &gt; <strong>Graphics</strong>.</li>
+                <li>Find your browser (Chrome / Edge / Firefox) in the list (or click <em>Browse</em> to add it).</li>
+                <li>Click <strong>Options</strong> and select <strong>"High performance (NVIDIA / AMD GPU)"</strong>.</li>
+                <li>Restart your browser and re-run this test!</li>
+              </ol>
+            </div>
+
+            <!-- macOS Guide -->
+            <div class="os-guide-item">
+              <span class="os-guide-title">🍎 macOS (MacBook Pro / Dual GPU)</span>
+              <ol class="guide-steps">
+                <li>Open <strong>System Settings</strong> &gt; <strong>Battery</strong>.</li>
+                <li>Click <strong>Options</strong> at the bottom.</li>
+                <li>Turn <strong>OFF</strong> <em>"Automatic graphics switching"</em> (forces high-performance dGPU).</li>
+              </ol>
+            </div>
+
+            <!-- Chrome Flag Guide -->
+            <div class="os-guide-item">
+              <span class="os-guide-title">🌐 Chrome / Edge Flag</span>
+              <ol class="guide-steps">
+                <li>Type <code>chrome://flags</code> in your address bar.</li>
+                <li>Search for <strong>"Force dedicated GPU"</strong> or <strong>"Default ANGLE graphics backend"</strong>.</li>
+                <li>Set to <strong>D3D11</strong> or <strong>OpenGL</strong> and relaunch.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="modalDoneBtn" class="btn-subtle">Done / Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Simple Footer -->
   <footer class="app-footer">

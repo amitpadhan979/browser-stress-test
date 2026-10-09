@@ -18,6 +18,9 @@
   - Plain-English status shows whether your device is running **🟢 Cool & Stable**, **🟡 Getting Warm**, or **🔴 Slowing Down (Overheating)** to protect hardware.
 - **Collapsible Advanced Tools for Power Users**:
   - Manual CPU thread count sliders, duty cycles, WebGL resolution scaling, and real-time dual-axis charts are neatly organized inside an optional **Advanced Settings** drawer.
+- **Dedicated GPU (dGPU) Permission & Switching**:
+  - Automatically identifies whether your browser is running on the power-saving Integrated GPU (iGPU) or High-Performance Dedicated GPU (dGPU).
+  - Provides a 1-click **"Request dGPU"** modal to re-initialize graphics with `powerPreference: 'high-performance'` and guided steps for Windows Graphics Settings, macOS Battery options, and Chrome flags.
 - **Memory-Safe Zero-Allocation Architecture**:
   - Uses pre-allocated TypedArray buffers and macrotask scheduling in Web Workers, guaranteeing zero freezes, zero memory leaks, and instant responsiveness.
 

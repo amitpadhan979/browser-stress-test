@@ -162,12 +162,105 @@ class AccurateStressApp {
         document.getElementById('logContainer').innerHTML = '';
       });
     }
+
+    // dGPU Permission & Switching Modal
+    const dgpuRequestBtn = document.getElementById('dgpuRequestBtn');
+    const dgpuModal = document.getElementById('dgpuModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const modalDoneBtn = document.getElementById('modalDoneBtn');
+    const recreateDgpuBtn = document.getElementById('recreateDgpuBtn');
+
+    if (dgpuRequestBtn && dgpuModal) {
+      dgpuRequestBtn.addEventListener('click', () => this.openDgpuModal());
+      if (closeModalBtn) closeModalBtn.addEventListener('click', () => this.closeDgpuModal());
+      if (modalDoneBtn) modalDoneBtn.addEventListener('click', () => this.closeDgpuModal());
+      dgpuModal.addEventListener('click', (e) => {
+        if (e.target === dgpuModal) this.closeDgpuModal();
+      });
+
+      if (recreateDgpuBtn) {
+        recreateDgpuBtn.addEventListener('click', () => this.handleRecreateDgpu());
+      }
+    }
+  }
+
+  openDgpuModal() {
+    const modal = document.getElementById('dgpuModal');
+    if (!modal) return;
+    const info = this.deviceInfo.data;
+
+    document.getElementById('modalActiveGpu').textContent = info.cleanGpuModel;
+    const typeBadge = document.getElementById('modalGpuType');
+    typeBadge.textContent = info.gpuType;
+    typeBadge.className = `gpu-badge ${info.isDedicated ? 'dgpu' : 'igpu'}`;
+
+    const list = document.getElementById('modalAdaptersList');
+    list.innerHTML = '';
+    if (info.adaptersList && info.adaptersList.length > 0) {
+      info.adaptersList.forEach(a => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${a.name}</span> <span class="gpu-badge ${a.type === 'dGPU' ? 'dgpu' : 'igpu'}">${a.type}</span>`;
+        list.appendChild(li);
+      });
+    } else {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${info.cleanGpuModel} (Active WebGL Renderer)</span> <span class="gpu-badge ${info.isDedicated ? 'dgpu' : 'igpu'}">${info.isDedicated ? 'dGPU' : 'iGPU'}</span>`;
+      list.appendChild(li);
+    }
+
+    modal.style.display = 'flex';
+  }
+
+  closeDgpuModal() {
+    const modal = document.getElementById('dgpuModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  handleRecreateDgpu() {
+    this.log('Re-requesting WebGL / WebGPU graphics context with powerPreference: "high-performance"...', 'info');
+    if (this.gpuStress) {
+      this.gpuStress.recreateContext('high-performance');
+    }
+    this.deviceInfo.detectWebGL('high-performance');
+    this.deviceInfo.classifyGpuType();
+    const info = this.deviceInfo.data;
+    this.renderDeviceBanner(info);
+
+    const btn = document.getElementById('recreateDgpuBtn');
+    if (btn) {
+      btn.textContent = '✓ High-Performance Requested!';
+      btn.style.background = '#10b981';
+      setTimeout(() => {
+        btn.textContent = '⚡ Request High-Performance dGPU Mode';
+        btn.style.background = '';
+      }, 3000);
+    }
+    this.log(`Active graphics renderer updated: ${info.cleanGpuModel} (${info.gpuType})`, 'success');
   }
 
   renderDeviceBanner(info) {
     const summaryEl = document.getElementById('quickDeviceSummary');
     const hzStr = info.displayHz ? ` • ${info.displayHz}Hz Display` : '';
     summaryEl.textContent = `${info.os} • ${info.cpuThreads} CPU Threads • ${info.cleanGpuModel}${hzStr}`;
+
+    // Update GPU classification pill
+    const gpuTypeBadge = document.getElementById('gpuTypeBadge');
+    if (gpuTypeBadge) {
+      gpuTypeBadge.textContent = info.isDedicated ? 'dGPU Active' : 'iGPU Mode';
+      gpuTypeBadge.className = `gpu-badge ${info.isDedicated ? 'dgpu' : 'igpu'}`;
+    }
+
+    // Update dGPU button label
+    const dgpuBtn = document.getElementById('dgpuRequestBtn');
+    if (dgpuBtn) {
+      if (info.isDedicated) {
+        dgpuBtn.textContent = '🎮 dGPU Active';
+        dgpuBtn.title = 'Dedicated GPU is currently active and in use';
+      } else {
+        dgpuBtn.textContent = '🎮 Request dGPU';
+        dgpuBtn.title = 'Switch to dedicated high-performance GPU';
+      }
+    }
 
     if (info.battery.supported) {
       const batPill = document.getElementById('batteryPill');
