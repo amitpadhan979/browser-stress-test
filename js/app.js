@@ -305,30 +305,38 @@ class AccurateStressApp {
 
     switch (level) {
       case 'gentle':
+        this.cpuManager.setOverdrive(false);
         threadsSlider.value = Math.max(1, Math.floor(cores / 2));
         loadSlider.value = 50;
         resScale.value = '0.5';
         if (this.gpuStress) {
+          this.gpuStress.setPassesPerFrame(1);
           this.gpuStress.setStressIntensity('light');
           this.gpuStress.setResolutionScale(0.5);
         }
         break;
 
       case 'standard':
+        this.cpuManager.setOverdrive(false);
         threadsSlider.value = cores;
         loadSlider.value = 85;
         resScale.value = '1.0';
         if (this.gpuStress) {
+          this.gpuStress.setPassesPerFrame(4);
           this.gpuStress.setStressIntensity('balanced');
           this.gpuStress.setResolutionScale(1.0);
         }
         break;
 
       case 'maximum':
-        threadsSlider.value = cores;
+        // Overdrive: spawns 1.5x concurrency to guarantee full saturation across hyperthreads/SMT
+        this.cpuManager.setOverdrive(true);
+        threadsSlider.value = Math.min(64, Math.round(cores * 1.5));
         loadSlider.value = 100;
         resScale.value = '1.5';
         if (this.gpuStress) {
+          // Multi-pass draw stacking to eliminate VSync idle gaps & hold GPU queue full
+          this.gpuStress.setPassesPerFrame(16);
           this.gpuStress.setStressIntensity('extreme');
           this.gpuStress.setResolutionScale(1.5);
         }

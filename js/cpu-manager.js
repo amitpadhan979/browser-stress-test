@@ -1,13 +1,15 @@
 /**
  * CPU Stress Test Manager
- * Accurately aggregates GigaFLOPS (Billion Floating-Point Ops/sec) across all threads.
+ * Manages worker thread pool with SMT/Hyperthread overdrive for 100% Task Manager saturation.
  */
 
 export class CPUManager {
   constructor() {
     this.workers = [];
-    this.numThreads = navigator.hardwareConcurrency || 4;
+    this.baseThreads = navigator.hardwareConcurrency || 4;
+    this.numThreads = this.baseThreads;
     this.loadPercentage = 100;
+    this.isOverdrive = false;
     this.isRunning = false;
     this.totalCumulativeFlops = 0;
     this.currentGflops = 0;
@@ -18,6 +20,19 @@ export class CPUManager {
 
   setThreads(threads) {
     this.numThreads = Math.max(1, Math.min(64, threads));
+    if (this.isRunning) {
+      this.restart();
+    }
+  }
+
+  setOverdrive(enabled) {
+    this.isOverdrive = enabled;
+    if (enabled) {
+      // Scale to 1.5x concurrency (max 32) to saturate physical cores + SMT hyperthreads
+      this.numThreads = Math.min(32, Math.max(this.baseThreads, Math.round(this.baseThreads * 1.5)));
+    } else {
+      this.numThreads = this.baseThreads;
+    }
     if (this.isRunning) {
       this.restart();
     }
@@ -70,7 +85,6 @@ export class CPUManager {
     this.totalCumulativeFlops += data.flops;
     this.workerGflopsMap.set(data.workerId, data.gflops);
 
-    // Sum GigaFLOPS across active workers
     let sumGflops = 0;
     for (const gflops of this.workerGflopsMap.values()) {
       sumGflops += gflops;

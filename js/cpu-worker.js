@@ -4,7 +4,9 @@
  * 1. 64x64 Matrix Multiplications (524,288 FLOPs)
  * 2. N-Body Gravitational Astrophysics Simulation (327,680 FLOPs)
  * 3. Transcendental Trigonometric Math & Cryptographic Hashes (50,000 FLOPs)
- * Total calibrated FLOPs per batch: 901,968 FLOPs.
+ * Total calibrated FLOPs per batch: ~902,000 FLOPs.
+ * Uses zero-delay MessageChannel macrotask scheduling (NO 4ms browser setTimeout clamp)
+ * to achieve SOLID 100% CPU core utilization in Task Manager.
  */
 
 let isRunning = false;
@@ -12,6 +14,12 @@ let loadPercentage = 100;
 let workerId = 0;
 let totalFlops = 0;
 let lastReportTime = performance.now();
+
+// Zero-delay MessageChannel scheduler (avoids browser 4ms setTimeout clamp)
+const channel = new MessageChannel();
+channel.port2.onmessage = () => {
+  if (isRunning) runLoop();
+};
 
 // 1. Pre-allocated 64x64 matrix buffers (Zero GC overhead)
 const N_MAT = 64;
@@ -30,7 +38,6 @@ const velY = new Float64Array(NBODIES);
 const velZ = new Float64Array(NBODIES);
 const mass = new Float64Array(NBODIES);
 
-// Initialize initial celestial body positions
 for (let i = 0; i < NBODIES; i++) {
   posX[i] = Math.sin(i) * 10.0;
   posY[i] = Math.cos(i) * 10.0;
@@ -49,7 +56,8 @@ function scheduleNextCycle(restMs) {
   if (restMs > 1) {
     setTimeout(runLoop, restMs);
   } else {
-    setTimeout(runLoop, 0);
+    // Instant zero-delay yield to worker event loop - ZERO idle gap!
+    channel.port1.postMessage(null);
   }
 }
 
@@ -123,7 +131,7 @@ function runLoop() {
   if (!isRunning) return;
 
   const cycleStart = performance.now();
-  const sliceBudget = 30; // 30ms non-blocking slices
+  const sliceBudget = loadPercentage >= 100 ? 50 : 30; // 50ms dense budget for 100% saturation
   const targetWorkTime = sliceBudget * (loadPercentage / 100);
   const targetRestTime = sliceBudget * ((100 - loadPercentage) / 100);
 
@@ -137,7 +145,7 @@ function runLoop() {
   const now = performance.now();
   if (now - lastReportTime >= 250) {
     const elapsedSec = (now - lastReportTime) / 1000;
-    const gflops = (totalFlops / elapsedSec) / 1e9; // Billion FLOPs / sec
+    const gflops = (totalFlops / elapsedSec) / 1e9;
     self.postMessage({
       type: 'METRICS',
       workerId,
