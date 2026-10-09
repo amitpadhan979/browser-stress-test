@@ -98,7 +98,42 @@
         </div>
       </div>
 
-      <!-- Step 3: Big Start Button -->
+      <!-- Step 3: Heavy 3D Model Selection -->
+      <div class="setup-group">
+        <label class="setup-label">3. Choose 3D Test Model</label>
+        <div class="model-selector-grid">
+          <button class="model-btn active" data-model="furmark">
+            <span class="model-icon">🍩</span>
+            <div class="model-text">
+              <span class="model-name">FurMark Furry Donut</span>
+              <span class="model-detail">Heavy volumetric fur shelling & hair lighting (GPU Burner)</span>
+            </div>
+          </button>
+          <button class="model-btn" data-model="highpoly">
+            <span class="model-icon">💎</span>
+            <div class="model-text">
+              <span class="model-name">120,000 Triangle 3D Mesh</span>
+              <span class="model-detail">High-density geometric knot & metallic PBR shading</span>
+            </div>
+          </button>
+          <button class="model-btn" data-model="citadel">
+            <span class="model-icon">🪐</span>
+            <div class="model-text">
+              <span class="model-name">Cyber Citadel (Deep Raymarch)</span>
+              <span class="model-detail">128-step volumetric fractal with self-shadowing</span>
+            </div>
+          </button>
+          <button class="model-btn" data-model="particles">
+            <span class="model-icon">🌪️</span>
+            <div class="model-text">
+              <span class="model-name">500,000 Particle Storm</span>
+              <span class="model-detail">Extreme vertex throughput & blend overdraw</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 4: Big Start Button -->
       <div class="action-section">
         <button id="startBtn" class="big-start-btn">▶ START SPEED TEST</button>
       </div>
@@ -231,10 +266,12 @@
           </div>
 
           <div class="advanced-item">
-            <label class="advanced-label" for="shaderMode">3D Scene Type</label>
+            <label class="advanced-label" for="shaderMode">3D Scene Model</label>
             <select id="shaderMode">
-              <option value="fractal" selected>3D Volumetric Mandelbulb Fractal</option>
-              <option value="particles">300,000 Particle Vortex</option>
+              <option value="furmark" selected>🍩 Volumetric FurMark Furry Donut (GPU Burner)</option>
+              <option value="highpoly">💎 High-Poly 3D Mesh (120,000 Triangles)</option>
+              <option value="citadel">🪐 Volumetric Cyber Citadel (128 Steps)</option>
+              <option value="particles">🌪️ 500,000 Dynamic Particle Storm</option>
             </select>
           </div>
         </div>

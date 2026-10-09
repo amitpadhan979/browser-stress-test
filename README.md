@@ -18,11 +18,16 @@
   - Plain-English status shows whether your device is running **🟢 Cool & Stable**, **🟡 Getting Warm**, or **🔴 Slowing Down (Overheating)** to protect hardware.
 - **Collapsible Advanced Tools for Power Users**:
   - Manual CPU thread count sliders, duty cycles, WebGL resolution scaling, and real-time dual-axis charts are neatly organized inside an optional **Advanced Settings** drawer.
+- **Heavy 3D Benchmark Models**:
+  - 🍩 **FurMark Furry Donut**: Legendary GPU torture test featuring volumetric fur shelling, micro-hair noise, and anisotropic Kajiya-Kay lighting.
+  - 💎 **120,000 Triangle 3D Mesh**: High-density geometric torus knot stressing GPU vertex fetch, rasterization, and PBR metallic reflections.
+  - 🪐 **Volumetric Cyber Citadel**: Deep 128-step raymarching with self-shadows, ambient occlusion, and dynamic multi-light reflections.
+  - 🌪️ **500,000 Particle Storm**: High-throughput vertex stream testing memory bandwidth.
 - **Dedicated GPU (dGPU) Permission & Switching**:
   - Automatically identifies whether your browser is running on the power-saving Integrated GPU (iGPU) or High-Performance Dedicated GPU (dGPU).
   - Provides a 1-click **"Request dGPU"** modal to re-initialize graphics with `powerPreference: 'high-performance'` and guided steps for Windows Graphics Settings, macOS Battery options, and Chrome flags.
-- **Memory-Safe Zero-Allocation Architecture**:
-  - Uses pre-allocated TypedArray buffers and macrotask scheduling in Web Workers, guaranteeing zero freezes, zero memory leaks, and instant responsiveness.
+- **Heavy N-Body Physics & 64x64 Matrix Multi-Core CPU Engine**:
+  - Simulates gravitational interactions between celestial bodies and calculates $64 \times 64$ matrix multiplications for genuine 100% CPU thermal saturation with zero memory leaks.
 
 ---
 

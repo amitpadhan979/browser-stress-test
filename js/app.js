@@ -19,6 +19,7 @@ class AccurateStressApp {
     // User settings
     this.selectedIntensity = 'standard'; // 'gentle' | 'standard' | 'maximum'
     this.selectedDuration = 30; // seconds, 0 = continuous
+    this.selectedModel = 'furmark'; // 'furmark' | 'highpoly' | 'citadel' | 'particles'
     this.isRunning = false;
     this.elapsedSeconds = 0;
     this.timerInterval = null;
@@ -102,7 +103,20 @@ class AccurateStressApp {
       });
     });
 
-    // Step 3: Big Start Button
+    // Step 3: Heavy 3D Model Buttons
+    document.querySelectorAll('.model-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.selectedModel = btn.dataset.model;
+        if (this.gpuStress) this.gpuStress.setShaderMode(this.selectedModel);
+        const shaderModeSelect = document.getElementById('shaderMode');
+        if (shaderModeSelect) shaderModeSelect.value = this.selectedModel;
+        this.log(`Switched 3D test model to: [${this.selectedModel.toUpperCase()}].`, 'info');
+      });
+    });
+
+    // Step 4: Big Start Button
     document.getElementById('startBtn').addEventListener('click', () => this.toggleStart());
 
     // Fullscreen Viewport
@@ -152,7 +166,12 @@ class AccurateStressApp {
 
     const shaderMode = document.getElementById('shaderMode');
     shaderMode.addEventListener('change', (e) => {
-      if (this.gpuStress) this.gpuStress.setShaderMode(e.target.value);
+      this.selectedModel = e.target.value;
+      if (this.gpuStress) this.gpuStress.setShaderMode(this.selectedModel);
+      document.querySelectorAll('.model-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.model === this.selectedModel);
+      });
+      this.log(`3D Model set to: [${this.selectedModel.toUpperCase()}].`, 'info');
     });
 
     // Clear Logs
@@ -581,6 +600,7 @@ class AccurateStressApp {
       `-----------------------------------\n` +
       `🏆 Grade: ${r.grade} (${r.title})\n` +
       `⭐ Overall Score: ${r.totalScore.toLocaleString()}\n` +
+      `🎨 3D Benchmark Model: ${this.selectedModel.toUpperCase()}\n` +
       `⚙️ CPU Compute: ${r.cpuScore.toLocaleString()} (${r.gflops} GFLOPS • ${r.device.cpuThreads} Threads)\n` +
       `🎮 GPU Graphics: ${r.gpuScore.toLocaleString()} (~${r.uncappedFps} Uncapped FPS • ${r.renderLatencyMs} ms latency • ${r.device.cleanGpuModel})\n` +
       `🖥️ Display: ${r.device.displayHz}Hz • ${r.device.os}\n` +
