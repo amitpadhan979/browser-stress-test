@@ -72,6 +72,8 @@ browser-stress-test/
 ├── index.html              # Main responsive dashboard interface
 ├── css/
 │   └── styles.css          # Cyberpunk dark-mode telemetry styles
+├── benchmarks/
+│   └── performance-monitor.js # Telemetry sampler for FPS, heap memory, and stress metrics
 ├── js/
 │   ├── app.js              # Coordinator and benchmark logic
 │   ├── device-info.js      # Hardware detection and telemetry
